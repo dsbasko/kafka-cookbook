@@ -1,50 +1,128 @@
-# 01-01 — Architecture and KRaft
+# 01-01 - Architecture and KRaft
 
-This is where the conversation starts. What Kafka actually is, what it consists of, and why the course sandbox runs on three nodes in KRaft mode with no separate ZooKeeper.
+This lecture introduces Kafka through a running case study. Across all six lectures of this module we hold a single scene: a fictional coffee shop chain called Brew, whose backend started life as a monolith, grew into five services, and ran into a queue. If you're a backend developer comfortable with HTTP and SQL but you've only seen Kafka in a README, this is your entry point.
+
+## Brew - a coffee shop that got stuck in a queue
+
+Brew runs 80 cafes in a single city. The backend started as a monolith on PostgreSQL with one worker. When the mobile app launched and a partner program with couriers came online, the monolith broke apart into five services:
+
+- `catalog-service` - menus, prices, stock.
+- `order-service` - order intake.
+- `kitchen-service` - lives on the cafe side, prepares drinks.
+- `delivery-service` - coordinates couriers.
+- `analytics-service` - reports for management.
+
+The services talked over HTTP. If the kitchen service fell, the order fell with it (nobody to confirm readiness). If payments fell, the order fell too (nobody to charge the card). The on-call engineer walked through the logs and killed stuck requests by hand. They installed RabbitMQ in its classic configuration (durable queues, competing consumers, no Streams and no quorum queues - those didn't exist in 2018 yet). Life got easier. Orders piled up in the queue and waited until the kitchen came back. The cascade stopped.
+
+Six months of peace. Then the pain came back, just shaped differently.
+
+First, the analytics team asked for a clickstream dump for the past three weeks. A classic RabbitMQ queue has nothing to re-read: a message is consumed and gone, no history. The team proposed duplicating everything to S3 in parallel with the queue. The result was two systems instead of one, plus the joys of bugs in keeping them in sync.
+
+Second, they spun up a second instance of `notification-service` to handle peak load. RabbitMQ split messages between the two instances under competing consumers - each copy got its own subset. That works for email blasts. For a local cache, or for "every copy needs to see the whole stream" (fan-out to several independent subscribers), it doesn't.
+
+Third, the queue filled up when a consumer fell behind. On default settings the queue grew in RAM, and on a broker restart some messages could land in the dead letter exchange.
+
+Fourth, hooking up a new consumer meant declaring an exchange, a queue, a binding, and coordinating the schema with the producer team. Technically solvable. Organizationally, a bottleneck.
+
+The realization: Brew needs an event log that can be re-read from any point, served to several independent consumers, and doesn't require schema coordination with the producer every time. That's Kafka. From here on - how it actually works.
+
+> The comparison here is to RabbitMQ in its classic configuration (durable queues, competing consumers). RabbitMQ Streams (since 3.9) and quorum queues have their own scenarios, partially covering the points above. This course focuses on the classic setup because that's what teams migrating to Kafka most often have in production.
 
 ## What Kafka is
 
-Kafka is a distributed log. The word "log" trips up newcomers, so let's nail down what it means here.
+Kafka is a distributed append-only log. The word "log" trips people up: they think of a text file with errors, like `/var/log/syslog`. This is something else.
 
-Log here means a sequence of messages, ordered by write time. Nothing in common with an error file. You append to the end, read from any position. You can't delete from the middle — you wait until retention drops old records (retention gets its own lecture). The result is an append-only tape that you can replicate across nodes and read independently from many places.
+A log in Kafka is a sequence of messages ordered by write time. The closest analogy from the database world is the WAL in PostgreSQL. Before every table change, Postgres writes a record into the Write-Ahead Log: "this location, these bytes". The WAL is append-only, read strictly sequentially, replicated to standbys. Kafka works the same way, with two differences. A record is available for reading immediately (no need to wait for recovery), and several independent clients can read it in parallel.
 
-Why is it needed? When two services want to talk, they usually have one of two options: a synchronous request (HTTP, gRPC) or a queue. Kafka is about the queue. But an unusual one:
+So Kafka behaves like a queue, but a strange one:
 
-- messages don't vanish after being read (you can re-read them),
-- multiple consumers see them independently (one doesn't "take" a message from another like in RabbitMQ),
-- order is guaranteed within a partition,
-- throughput is hundreds of thousands and millions of messages per second on normal hardware,
-- retention is whatever you configure (even forever).
+- messages don't disappear after being read, you can re-read from any position;
+- several consumers see them independently, one doesn't "take" a message away from another;
+- order is guaranteed inside a partition (more on partitions in [01-02](../../../01-02-topics-and-partitions/i18n/ru/README.md));
+- data is kept as long as you configure - forever, or three days.
 
-These properties drive the use cases: microservice integration (event-driven), CDC, analytics, task queues, audit log. Anywhere you need to "pass a stream of data and not lose it".
+Out of that come the use cases: integrating microservices through events, CDC (Change Data Capture) from databases, analytics collection, audit logs, task queues with replay capability. Anywhere you have a stream of data and want the option to replay it.
+
+Brew will use Kafka exactly that way. The following vocabulary will run through all six lectures of this module:
+
+- topics `brew.orders.v1`, `brew.payments.v1`, `brew.kitchen.v1`, `brew.delivery.v1`;
+- events `OrderPlaced`, `PaymentReceived`, `KitchenStarted`, `OrderReady`, `OrderDelivered`;
+- retention of 30 days for orders and payments, 7 days for kitchen and delivery;
+- compliance data (years of it) lives in S3, not in Kafka - covered in [01-04](../../../01-04-offsets-and-retention/i18n/ru/README.md).
+
+### How Kafka differs from RabbitMQ (for those with prior experience)
+
+| Aspect | RabbitMQ classic | Kafka |
+| --- | --- | --- |
+| Model | broker distributes messages between consumers | broker stores a log, consumer picks its own position |
+| What happens after read | message deleted (ack) | message stays, dropped by retention |
+| Multiple consumers on one queue | competing consumers, share the stream | consumer group shares the stream; different groups see the full stream independently |
+| Replay | needs special setup or external storage | built in, just change the offset |
+| Adding a new consumer | declare a queue and a binding | subscribe to the topic, the producer never knows |
+| Throughput | tens of thousands of msg/s on a typical cluster | hundreds of thousands and millions of msg/s |
+
+This doesn't mean Kafka is "better". Better fits its case. Task queues with complex routing and priorities are still more convenient in RabbitMQ. But the moment the scenario becomes "we need to re-read history" or "several independent subscribers on one stream", Kafka fits better.
 
 ## The actors
 
-Kafka has several types of participants. Memorise them right away — they'll show up in every later lecture.
+Kafka has four kinds of participants. They show up across all the other lectures, so memorise the names right away.
 
-1. **Broker** — a node that stores data. Topics and partitions live on brokers. The sandbox has three — `kafka-1`/`kafka-2`/`kafka-3`.
-2. **Controller** — the brain of the cluster. Assigns leaders to partitions, maintains the ISR list, reassigns partitions when nodes fall, validates topic schema changes. In KRaft the controller is a role carried by one of the broker nodes; previously (before KRaft) ZooKeeper held the metadata.
-3. **Producer** — the client that writes messages. This is your Go code with `kgo.Client.Produce(...)`.
-4. **Consumer** — the client that reads. Also Go code, more often through a consumer group.
+1. **Broker** - a node that stores data. Topics and partitions live on brokers. With two brokers data spreads across two; with five, across five. The course sandbox has three (`kafka-1`, `kafka-2`, `kafka-3`). Without a broker, there's nothing to store on.
+2. **Controller** - the brain of the cluster. Assigns leaders to partitions, tracks the ISR list (in-sync replicas, see [01-03](../../../01-03-replication-and-isr/i18n/ru/README.md)), reassigns partitions when nodes fall, validates topic schema changes. There's one active controller per cluster. Without a controller, nobody decides who the current leader is.
+3. **Producer** - the client that writes. This is your Go code with `kgo.Client.Produce(...)`. The producer picks a topic, a key, a payload, and sends it to a broker. Without a producer, the log is empty.
+4. **Consumer** - the client that reads. Also Go code, more often through a consumer group. Without a consumer, nobody reads the log, which is fine for Kafka - data can sit.
 
-Brokers and the controller are the server. Producer and consumer are the client. On the sandbox the server lives inside docker compose, the clients live inside your lectures.
+Broker and controller live on the server (in the sandbox, in docker compose). Producer and consumer live in your Go application. A single process can be both a producer and a consumer (the classic consume-process-produce pattern - see [04-02](../../../../04-reliability/04-02-consume-process-produce/i18n/ru/README.md)).
 
-## What KRaft is
+## Why a three-node cluster
 
-Kafka could not run without ZooKeeper before. ZK held all metadata — the list of topics, ACLs, the broker→partition map, who is the leader, who is in the ISR. That scheme had its share of pain: a separate ZK cluster with its own failure mode, and a limit on the number of partitions — metadata over znodes scaled poorly past a couple hundred thousand.
+Brew could have spun up one Kafka node and called it a day. They couldn't.
 
-KRaft — Kafka Raft. Metadata moved inside Kafka, into a special topic `__cluster_metadata`. This topic is a regular log, replicated across nodes through Raft consensus. The nodes that participate in Raft and vote for the leader-controller are called **voters**. The active leader among voters is the current cluster controller.
+One broker is one point of failure. The broker falls, the cluster is unreachable. That's not Kafka-specific, that's any single-instance backend.
+
+Two brokers are worse than one. When the network between them breaks, both nodes consider themselves alive and assume the other is dead. That's split brain: each half keeps accepting writes, then you try to glue them back together, the history has diverged, and you spend a week resolving conflicts.
+
+Three brokers - a quorum. A majority (2 out of 3) agrees on a decision. When one node falls, the other two keep working, the controller is re-elected in seconds, nobody notices (if you're lucky). This is basic arithmetic of consensus: to survive N failures you need `2N + 1` nodes. For one failure - three. For two - five.
+
+Brew picked three. The money for five wasn't there, but nobody wanted downtime every time a single node went down.
+
+## KRaft - metadata inside Kafka
+
+Until 2021, Kafka couldn't live without ZooKeeper. ZK was a separate cluster that held all Kafka metadata: the list of topics, ACLs, the broker-to-partition mapping, who the current leader is, who's in the ISR. Each broker opened a session with ZK, exchanged state with the others through a znode tree, and elected a new controller when one fell.
+
+The pain points of this design had been known for a long time:
+
+- two clusters instead of one (Kafka and ZooKeeper) with two failure modes;
+- metadata through znodes scaled poorly (ceiling around 200k partitions);
+- complex bootstrap (bring up ZK first, then Kafka, then wait for sync);
+- extra skill on the team (DevOps has to know both systems).
+
+KRaft - Kafka Raft. Metadata moved inside Kafka, into a special system topic `__cluster_metadata`. That topic is a regular append-only log (like all the others), replicated between nodes through Raft consensus. The nodes that participate in Raft and vote for the leader-controller are called **voters**. The active leader among voters is the current cluster controller.
 
 What this gives you in practice:
 
-- one system instead of two (Kafka + ZK → just Kafka),
-- one metadata format (a topic-log, not a ZK znode tree),
-- faster recovery after a controller fall,
-- easier to keep millions of partitions in memory.
+- one system instead of two (Kafka instead of Kafka + ZK);
+- one metadata format (a topic-log, not a znode tree);
+- faster recovery after a controller fall (seconds rather than tens of seconds);
+- easier scaling to millions of partitions (the ZK ceiling is gone).
 
-One downside: the ecosystem is still catching up. Part of the tutorials and Stack Overflow answers are still about ZK. KRaft is stable since Kafka 3.5 and became the default starting with Kafka 4.0 — the sandbox runs 4.2.0, ZK isn't even mentioned.
+One downside: the ecosystem is still catching up. Some tutorials and Stack Overflow answers still describe ZooKeeper. KRaft was declared production-ready in Kafka 3.5 and became the default starting with Kafka 4.0. The course sandbox runs 4.2.0, ZooKeeper isn't even mentioned.
 
-There are two node layouts. Combined mode — every node is both a broker and a potential controller. Dedicated mode — separate controller nodes (voters only, no partition storage). For a small cluster combined mode is simpler; for prod with dozens of brokers people usually go dedicated.
+### Raft in one minute
+
+If you've never touched it: Raft is a consensus algorithm. Several nodes agree on the order of log entries in such a way that when a minority fails, the remaining majority keeps working.
+
+Every so often voters hold an election. One becomes the leader, the others are followers. Any write to `__cluster_metadata` goes through the leader: it takes the request, replicates the entry to the followers, waits for an acknowledgement from a majority, and tells the client "written". If the leader falls, the remaining voters run elections again, pick a new leader, and continue.
+
+What matters for understanding KRaft: the Raft leader and the cluster controller are the same node at any given moment. When we say "the controller fell" in the KRaft era, it means the Raft leader fell and re-election is in progress.
+
+### Combined vs dedicated mode
+
+Voters can live in two ways.
+
+In **combined mode**, every node is both a broker (stores partitions of user topics) and a potential controller (participates in Raft for `__cluster_metadata`). Minimum hardware, good for small clusters and sandboxes. The course sandbox uses this mode.
+
+In **dedicated mode**, voters and brokers are separated: 3 to 5 dedicated controller nodes run only Raft, the other nodes are pure brokers that don't participate in elections. That's what production setups with dozens of brokers do, because the controller load is isolated from user traffic and can be scaled independently.
 
 ## Sandbox topology
 
@@ -72,23 +150,23 @@ The course sandbox is combined mode. Three nodes, each one a broker and a voter 
                     replicate __cluster_metadata
 ```
 
-Now layer by layer:
+Each broker has three listeners on different ports. Three is unsettling at first sight, so let's break them down.
 
-- **EXTERNAL listener (:9094 inside the container, mapped to 19092/19093/19094 on the host)** — for clients from your machine. This is where `kgo.Client` knocks.
-- **INTERNAL listener (:9092)** — for broker-to-broker traffic inside the docker network. Partition replication runs here.
-- **CONTROLLER listener (:9093)** — Raft. Voters vote for the leader, replicate metadata. A client has no business going there.
+- **EXTERNAL listener** (`:9094` inside the container, mapped to `19092`/`19093`/`19094` on the host) - the entry point for clients from your machine. This is where `kgo.Client` from the Go code in each lecture knocks.
+- **INTERNAL listener** (`:9092`) - for broker-to-broker traffic inside the docker network. Partition replication runs here, kept off the outside world.
+- **CONTROLLER listener** (`:9093`) - Raft. Voters exchange votes, replicate `__cluster_metadata`. A client has no business going there.
 
-ClusterID is fixed (`5nnS6DRtQnKwoMjkkVxxug`) — set in `docker-compose.yml` so the sandbox survives `docker compose down` without losing identity.
+ClusterID is fixed (`5nnS6DRtQnKwoMjkkVxxug`) and set in `docker-compose.yml`. That way the sandbox survives `docker compose down` without losing identity: on the next start the brokers recognize each other and don't recreate metadata from scratch.
 
-Min ISR = 2, default replication factor = 3. That means: data lives on three nodes, and a write needs an acknowledgement from two. If one falls — you won't notice. If two fall — a producer with `acks=all` will start getting `NotEnoughReplicas`. More on this in [Acks and durability](../../../../02-producer/02-02-acks-and-durability/i18n/ru/README.md) and [Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md).
+Min ISR = 2, default replication factor = 3. That means: data lives on three nodes, and a write needs an acknowledgement from two. If one falls, you won't notice. If two fall, a producer with `acks=all` will start getting `NotEnoughReplicas`. Details on these settings in [02-02](../../../../02-producer/02-02-acks-and-durability/i18n/ru/README.md) and [04-01](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md).
 
 ## What's inside `__cluster_metadata`
 
-It helps to see it once so it stops being scary. The topic is hidden (a system topic), but it's there.
+It helps to see it once with your own eyes, so the fear goes away. The topic is hidden (a system topic), but it's a real log on disk - you can dump it.
 
-Inside — records about topics, partitions, configs, ACLs, voter membership changes. Every broker on start pulls this log from the beginning, rebuilds a local metadata snapshot, then watches the tail and applies updates as they arrive. The controller writes any changes there through its Raft layer.
+Inside are records about topics, partitions, configs, ACLs, voter membership changes. Every broker, on start, pulls the log from the beginning, rebuilds a local snapshot of metadata, then watches the tail and applies updates as they arrive. The controller writes any changes there through its Raft layer - so all nodes see the same picture of the world.
 
-You can peek like this:
+The dump looks roughly like this:
 
 ```sh
 docker exec kafka-1 /opt/kafka/bin/kafka-dump-log.sh \
@@ -96,29 +174,32 @@ docker exec kafka-1 /opt/kafka/bin/kafka-dump-log.sh \
   --files /var/lib/kafka/data/__cluster_metadata-0/00000000000000000000.log | head -50
 ```
 
-You'll see records like `RegisterBrokerRecord`, `TopicRecord`, `PartitionRecord`, `ConfigRecord` and so on. Don't dig into the format right now — just remember that it's a regular log with typed records.
+You'll see records like `RegisterBrokerRecord`, `TopicRecord`, `PartitionRecord`, `ConfigRecord` and so on. Don't dive into the format - just remember it's a regular log with typed records. The same data model as Brew's order topics, just for system use.
 
-## What our program shows
+## The quorum-status program
 
-`cmd/quorum-status/main.go` is the Go equivalent of `kafka-metadata-quorum.sh ... describe --status`. It makes two requests:
+Brew has spun up the sandbox. How do you check that the cluster is alive, the controller is elected, all voters are present?
 
-1. **`kadm.Client.BrokerMetadata`** — returns ClusterID, the broker count, host/port/rack of each one, and a `Controller` field. A small trap: in KRaft this field does not show the Raft-leader directly. The broker returns the id of the broker through which controller-requests can be proxied. The name in the output — `MetadataControllerProxy`.
-2. **`kmsg.DescribeQuorumRequest`** on the `__cluster_metadata` topic, partition 0 — returns the real Raft-leader and the list of voters. This is the same thing that `kafka-metadata-quorum.sh ... describe --status` prints. The name in the output — `RaftLeader`.
+You can go through the CLI (`kafka-metadata-quorum.sh ... describe --status` inside the container). Or you can go through Go - which is what we do in `cmd/quorum-status/main.go`. The program prints the ClusterID, the broker count, the active Raft controller-leader, and a table of voters.
 
-Why two requests at once. The first — to see that the general cluster metadata is reachable without a shell. The second — to see that for KRaft-specific questions ("who is the current metadata leader") you have to drop down to `kmsg` (the low-level Kafka API), because kadm doesn't wrap DescribeQuorum in a convenient method yet. This is normal franz-go practice: high-level kadm for the common case, kmsg for the rare and specific one.
+Under the hood there are two requests. One trap is buried here, and people regularly walk into it.
 
-The first request — one line through kadm:
+### Request one - `BrokerMetadata` through kadm
 
 ```go
 admin := kadm.NewClient(cl)
 
 md, err := admin.BrokerMetadata(rpcCtx)
-// md.Cluster      — cluster ClusterID (the same UUID as in docker-compose.yml)
-// md.Controller   — id of the proxy broker for controller-requests (NOT the Raft-leader)
-// md.Brokers      — []BrokerDetail with NodeID/Host/Port/Rack
+// md.Cluster      - cluster ClusterID (the same UUID as in docker-compose.yml)
+// md.Controller   - id of the proxy broker for controller-requests (NOT the Raft-leader)
+// md.Brokers      - []BrokerDetail with NodeID/Host/Port/Rack
 ```
 
-The second — by hand through kmsg, because there's no ready wrapper:
+This request goes through the high-level `kadm.Client` (an admin wrapper around franz-go) and returns general cluster metadata. The `Controller` field here returns the id of a broker through which controller-requests can be proxied. In the KRaft world this is **not the Raft leader**, just a proxy-coordinator. In the program output it's labelled `MetadataControllerProxy` to avoid confusion.
+
+### Request two - `DescribeQuorum` through kmsg
+
+To get the real Raft leader (i.e. the currently active cluster controller), you need a low-level `DescribeQuorum` request against the `__cluster_metadata` topic, partition 0. kadm has no ready-made wrapper yet, so it's assembled by hand through `kmsg`:
 
 ```go
 req := kmsg.NewPtrDescribeQuorumRequest()
@@ -131,28 +212,36 @@ req.Topics = []kmsg.DescribeQuorumRequestTopic{topic}
 
 resp, err := req.RequestWith(ctx, cl)
 p := resp.Topics[0].Partitions[0]
-// p.LeaderID       — the real Raft-leader (the active controller)
-// p.CurrentVoters  — list of voters: [{ReplicaID:1}, {ReplicaID:2}, {ReplicaID:3}]
+// p.LeaderID       - the real Raft leader (the active controller)
+// p.CurrentVoters  - list of voters: [{ReplicaID:1}, {ReplicaID:2}, {ReplicaID:3}]
 ```
 
-Then the code just glues the two answers together: the broker with the id from `LeaderID` gets the `broker + active controller` role in the table, the other voters — `broker + voter`.
+This is normal franz-go practice: high-level `kadm` for the common case, low-level `kmsg` for the rare and specific. Wrappers appear as demand grows; until then, you write it like above.
 
-Further in the course we almost never call the CLI — everything goes through franz-go and kadm. We'll come back here in [Groups and rebalance](../../../../03-consumer/03-01-groups-and-rebalance/i18n/ru/README.md) and [Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md), when you need to know who the current controller is to understand the consequences of its re-election.
+### The trap: MetadataControllerProxy ≠ RaftLeader
+
+If you accidentally print `md.Controller` as "the current controller", you'll get **the wrong one**. That's the id of a proxy broker through which controller-requests can be sent. It can switch to any other broker in the cluster once a second, because it's just a routing hint. The RaftLeader (the one that actually drives `__cluster_metadata`) only changes during a Raft re-election, which is rare.
+
+Our output shows both fields explicitly, so you can see the difference. In production, if you're monitoring "is the controller alive", look at RaftLeader through DescribeQuorum, not Controller through Metadata.
+
+After that the code just glues the two answers together. The broker whose id matches `LeaderID` gets the `broker + active controller` role in the table; the other voters get `broker + voter`.
+
+Further in the course we almost never call the CLI - everything goes through franz-go and kadm. We'll come back here in [03-01](../../../../03-consumer/03-01-groups-and-rebalance/i18n/ru/README.md) and in [04-01](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md), when you need to know who the current controller is to understand the consequences of its re-election.
 
 ## Run
 
-The sandbox must be up (`docker compose up -d` from the repo root). Then:
+The sandbox must be up (`docker compose up -d` from the repo root). Then from the lecture directory:
 
 ```sh
 make run
 ```
 
-Expected output (ids will differ, RaftLeader — any of 1/2/3):
+Expected output (ids will differ, RaftLeader - any of 1/2/3):
 
 ```
 ClusterID:               5nnS6DRtQnKwoMjkkVxxug
 Brokers:                 3
-MetadataControllerProxy: 1  (BrokerMetadata.Controller; in KRaft — proxy, not Raft-leader)
+MetadataControllerProxy: 1  (BrokerMetadata.Controller; in KRaft - proxy, not Raft-leader)
 RaftLeader:              3  (DescribeQuorum on __cluster_metadata; this is the active controller)
 CurrentVoters:           [1 2 3]
 
@@ -162,20 +251,21 @@ NODE  HOST       PORT   RACK  ROLE
 3     localhost  19094  -     broker + active controller
 ```
 
-If you want to compare against the CLI version:
+If you want to confirm the Go output isn't lying, compare against the CLI version:
 
 ```sh
 make quorum-cli
 ```
 
-This target pokes `kafka-metadata-quorum.sh describe --status` inside the kafka-1 container — the official shell script from the Kafka distribution. The fields differ, but `LeaderId` from the CLI matches `RaftLeader` from the Go version (and `CurrentVoters` — our list). If it matches — great, you can now talk to Kafka from Go without a shell.
+This target pokes `kafka-metadata-quorum.sh describe --status` inside the kafka-1 container - the official shell script from the Kafka distribution. The fields differ, but `LeaderId` from the CLI matches `RaftLeader` from the Go version (and `CurrentVoters` matches our list). If they match - you can now talk to Kafka from Go without a shell.
 
 ## What you learned
 
-- Kafka is an append-only log that scales through partitions and is replicated across brokers.
-- The broker stores data, the controller hands out roles, the producer writes, the consumer reads.
-- KRaft is Kafka without ZooKeeper, metadata lives in `__cluster_metadata` through Raft.
-- The sandbox is three nodes in combined mode, the voters double as brokers.
-- Any CLI operation on metadata can be repeated from Go through `kadm.Client`.
+- Kafka is a distributed append-only log. The closest database-world analogy is the PostgreSQL WAL, except many clients can read it independently.
+- Brew came to Kafka from a world of HTTP and classic RabbitMQ. Triggers for the migration: replay for analytics, fan-out to several independent subscribers, growing load, and organizational coupling with the producer.
+- The cluster has brokers (which store data) and a controller (which assigns roles). The producer writes, the consumer reads. In the sandbox there are three nodes, each combining broker and voter duties.
+- KRaft is Kafka without ZooKeeper. Metadata lives in the `__cluster_metadata` system topic, replicated through Raft. Voters elect a leader, and the Raft leader is the active controller.
+- Any CLI metadata operation can be repeated from Go through `kadm.Client`. For KRaft-specific requests (like `DescribeQuorum`) you drop down to the `kmsg` level.
+- `MetadataControllerProxy` and `RaftLeader` are different things. The first is a routing hint, the second is the real controller. Don't mix them up in monitoring.
 
-In the next lecture ([Topics and partitions](../../../01-02-topics-and-partitions/i18n/ru/README.md)) we'll dig into topics and partitions — what "to partition" means, how the key drives distribution, why the partition count can't be reduced, and why the model is so strict in the first place.
+In the next lecture ([Topics and partitions](../../../01-02-topics-and-partitions/i18n/ru/README.md)) Brew will run a "free coffee on Fridays" promo, take 8000 orders per minute into a single topic, and hit the ceiling. Through that story we'll work out what a partition is, why you want several, how the partition key works, and why the partition count can't be reduced.

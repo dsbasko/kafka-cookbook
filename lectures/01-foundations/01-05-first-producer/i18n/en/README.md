@@ -89,7 +89,7 @@ A Brew story. When the promo team launched the "free coffee on Fridays" campaign
 
 `acks=1` - "leader confirmed". The broker replies "got it" as soon as the partition leader writes the data to its disk (technically, to the page cache - fsync is a separate conversation). Replicas may not have caught up yet. If the leader crashes immediately after the response and failover picks a replica that did not yet pull the record, the data is lost.
 
-This is the middle ground: latency is lower than `all`, the guarantee is stronger than `0`. Suitable for metrics and logs where "99.99% gets through" is fine. Too weak for business events: a cascading failure of kafka-1 at Brew once cost half a day of clickstream precisely because of `acks=1` on that topic. After that the clickstream moved to `acks=all` and the limits were re-evaluated.
+This is the middle ground: latency is lower than `all`, the guarantee is stronger than `0`. Suitable for metrics and logs where "99.99% gets through" is fine. Too weak for business events: a cascading failure of kafka-1 at Brew once cost half a day of telemetry precisely because of `acks=1` on `brew.telemetry.v1`. After that telemetry moved to `acks=all` and the limits were re-evaluated.
 
 `acks=all` - "all ISR confirmed". The broker waits until every replica in the ISR (see [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)) acknowledges the record before responding to the producer. With `min.insync.replicas=2` and RF=3 that means: the record is on disk on at least two nodes by the time `ProduceSync` returns. Failover loses data only if **all** ISR replicas fall together - a scenario after which Brew has bigger problems than a lost order.
 

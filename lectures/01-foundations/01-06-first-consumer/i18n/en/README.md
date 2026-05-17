@@ -93,9 +93,9 @@ In our teaching code, auto-commit is left enabled **on purpose** - so there is s
 1. `PollFetches` returned a batch of `OrderPlaced` records.
 2. We printed them (no real processing, the barista is implied).
 3. In parallel, a franz-go background goroutine sends `OffsetCommit` with the current position every 5 seconds.
-4. On SIGINT we call `cl.Close()`, which **additionally** triggers a final sync-commit before closing - this is part of the franz-go client lifecycle.
+4. On SIGINT we call `cl.Close()`. It stops the auto-commit goroutine and leaves the group cleanly. No final sync-commit happens in this setup: we overrode `OnPartitionsRevoked` (to print `revoked: ...` to stderr), which [per franz-go docs](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo#OnPartitionsRevoked) disables the default commit-on-revoke. Up to five seconds of last reads can stay uncommitted - on restart the same `OrderPlaced` records arrive again. This is the second trap in the wild; module 03 fixes it with a manual `CommitUncommittedOffsets`.
 
-That is why the output contains the line "kitchen-service остановлен по сигналу, offset'ы коммитятся в Close()". Without that final commit, auto mode could lose the last few seconds of reading.
+That is why the output contains the line "kitchen-service остановлен по сигналу". No promise about a final commit - we honestly admit that the last fraction of position may be lost.
 
 ## Shutting down correctly
 
@@ -106,7 +106,7 @@ ctx, cancel := runctx.New() // SIGINT/SIGTERM → ctx.Done()
 defer cancel()
 
 cl, _ := kafka.NewClient(...)
-defer cl.Close() // triggers the final commit and closes connections
+defer cl.Close() // leave the group and close connections (final commit comes in module 03)
 
 for {
     fetches := cl.PollFetches(ctx)
@@ -123,7 +123,7 @@ for {
 }
 ```
 
-Three details matter in this template. `defer cl.Close()` is mandatory; without it the final commit will not go out and the last few seconds of reading vanish on restart. The error check is mandatory; without it a context cancellation leads to an infinite loop with silent errors (PollFetches returns an empty fetches.Records() and immediately blocks again). Passing `ctx` straight into `PollFetches` (rather than substituting `context.Background()`) is the channel through which SIGINT reaches the client. In the module 03 lectures we add manual commit; the template stays the same and `cl.CommitUncommittedOffsets(ctx)` shows up before `cl.Close()`.
+Three details matter in this template. `defer cl.Close()` is mandatory; without it the client does not leave the group cleanly (the coordinator only learns about the death from `session.timeout.ms`, and until then partitions are not redistributed). `Close()` itself does **not** perform a final commit when `OnPartitionsRevoked` is overridden - that is stated explicitly in the [franz-go docs](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo#Client.Close); up to five seconds of last reads stay uncommitted. The error check is mandatory; without it a context cancellation leads to an infinite loop with silent errors (PollFetches returns an empty fetches.Records() and immediately blocks again). Passing `ctx` straight into `PollFetches` (rather than substituting `context.Background()`) is the channel through which SIGINT reaches the client. In the module 03 lectures we add manual commit; the template stays the same and `cl.CommitUncommittedOffsets(ctx)` shows up before `cl.Close()`.
 
 ## What our code does
 
@@ -162,10 +162,13 @@ The main loop is `PollFetches` plus printing through `EachRecord`. Along the way
 ```go
 for {
     fetches := cl.PollFetches(ctx)
+    if fetches.IsClientClosed() {
+        return nil
+    }
     if errs := fetches.Errors(); len(errs) > 0 {
         for _, e := range errs {
             if errors.Is(e.Err, context.Canceled) {
-                fmt.Println("kitchen-service остановлен по сигналу, offset'ы коммитятся в Close().")
+                fmt.Println("kitchen-service остановлен по сигналу.")
                 return nil
             }
             return fmt.Errorf("fetch %s/%d: %w", e.Topic, e.Partition, e.Err)
@@ -183,7 +186,7 @@ for {
 }
 ```
 
-The final commit is performed by `defer cl.Close()`. Without it the last five seconds of reading may not reach `__consumer_offsets`, and on restart the same `OrderPlaced` records will arrive again.
+`defer cl.Close()` cleanly leaves the group and closes connections, but it does **not** perform a final commit - with the custom `OnPartitionsRevoked` the default commit-on-revoke is disabled. Up to five seconds of reads may not reach `__consumer_offsets`, and on restart the same `OrderPlaced` records arrive again. Module 03 fixes this with an explicit `cl.CommitUncommittedOffsets(ctx)` before `Close()`.
 
 Expected output after `make run` on a freshly created group with 10 `OrderPlaced` records across three partitions:
 
@@ -274,6 +277,6 @@ The consumer mental model that the rest of module 03 builds on:
 2. **Inside a group, one partition has one reader**. Read parallelism is capped at the partition count of the topic. Extra instances sit idle.
 3. **PollFetches returns Fetches → Topics → Partitions → Records**. At the application level you almost always work via `EachRecord` or `EachPartition`.
 4. **Auto-commit lies by default**. It commits the read position, which has no connection to actual processing in code. Module 03 fixes this.
-5. **Shutdown through `cl.Close()` plus ctx from runctx**. Without `defer cl.Close()` the last seconds of committed offset are lost; without `ctx` in `PollFetches` you cannot exit the loop on SIGINT.
+5. **Shutdown through `cl.Close()` plus ctx from runctx**. `cl.Close()` cleanly leaves the group and closes connections; with `OnPartitionsRevoked` overridden it performs no final commit - up to five seconds of last reads can be lost. Fix it with an explicit `CommitUncommittedOffsets` in module 03. Without `ctx` in `PollFetches` you cannot exit the loop on SIGINT.
 
 Next - module 02. Back to the producer side, digging into what was "default": [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md), [Acks and durability](../../../../02-producer/02-02-acks-and-durability/i18n/en/README.md), [Idempotent producer](../../../../02-producer/02-03-idempotent-producer/i18n/en/README.md), [Batching and throughput](../../../../02-producer/02-04-batching-and-throughput/i18n/en/README.md), [Errors, retries and headers](../../../../02-producer/02-05-errors-retries-headers/i18n/en/README.md). Module 03 sits next to it - that is the one that turns this bare consumer into a production-grade one.

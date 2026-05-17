@@ -104,7 +104,7 @@ Since we touched on `__consumer_offsets`, two words about the cleanup parameter 
 - `delete` - standard behavior, default. Old segments are deleted according to retention.ms / retention.bytes. This is for ordinary event topics: `brew.orders.v1`, `brew.payments.v1`, `brew.kitchen.v1`, `brew.delivery.v1` - all on `delete`.
 - `compact` - log compaction. No whole segments are deleted. **Old versions of each key** are removed - the most recent record with key `K` survives until a new one with the same key appears. This is for state topics: latest customer profile, latest config, latest committed offset of a group.
 - `delete,compact` - hybrid. Segments are compacted by key, then anything older than retention is dropped entirely. Useful when both a snapshot and a time bound are needed.
-- Unset. The topic inherits the broker default (`log.cleanup.policy`, usually `delete`). On the Brew sandbox this is what happens - topics do not declare `cleanup.policy` explicitly.
+- Unset. The topic inherits the broker default (`log.cleanup.policy`, usually `delete`). In Brew production, event topics **explicitly** set `cleanup.policy=delete` (visible in the `brew.orders.v1` config above and in the `load-and-watch` code below) - the manifest reads itself without reaching for broker defaults.
 
 The `__consumer_offsets` topic uses `compact` exactly for the reason we mentioned: there are millions of closing offsets, but only the latest position of a group matters. Compaction is treated in depth in [Retention and compaction](../../../../08-operations/08-02-retention-and-compaction/i18n/en/README.md), that's where it belongs. Here it's enough to know that there are several options and that `__consumer_offsets` uses `compact`.
 

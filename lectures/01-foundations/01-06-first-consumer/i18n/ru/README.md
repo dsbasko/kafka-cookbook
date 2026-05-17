@@ -93,9 +93,9 @@ for {
 1. `PollFetches` вернул нам пакет `OrderPlaced`.
 2. Мы их напечатали (никакой реальной обработки, бариста условный).
 3. Параллельно фоновой горутиной franz-go раз в 5 секунд шлёт `OffsetCommit` с текущей позицией.
-4. На SIGINT мы делаем `cl.Close()`, который **дополнительно** дёрнет финальный sync-commit перед закрытием - это часть жизненного цикла franz-go клиента.
+4. На SIGINT мы делаем `cl.Close()`. Он останавливает auto-commit-горутину и корректно покидает группу. Финального sync-commit'а в этом сценарии **не происходит**: мы override-нули `OnPartitionsRevoked` (чтобы видеть `revoked: ...` в stderr), а это [по docs franz-go](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo#OnPartitionsRevoked) отключает дефолтный commit-on-revoke. До пяти секунд последних чтений могут остаться незакоммиченными - на рестарте те же `OrderPlaced` прилетят заново. Это и есть вторая ловушка во плоти; в модуле 03 чиним ручным `CommitUncommittedOffsets`.
 
-Поэтому в выводе будет видна строчка «kitchen-service остановлен по сигналу, offset'ы коммитятся в Close()». Без этого финального коммита авто-режим мог бы потерять последние секунды чтения.
+Поэтому в выводе будет видна строчка «kitchen-service остановлен по сигналу». Никаких обещаний про финальный коммит - честно говорим, что часть позиции может потеряться.
 
 ## Корректное завершение
 
@@ -106,7 +106,7 @@ ctx, cancel := runctx.New() // SIGINT/SIGTERM → ctx.Done()
 defer cancel()
 
 cl, _ := kafka.NewClient(...)
-defer cl.Close() // дёрнет финальный коммит и закроет соединения
+defer cl.Close() // покинуть группу и закрыть соединения (финальный commit добавим в модуле 03)
 
 for {
     fetches := cl.PollFetches(ctx)
@@ -123,7 +123,7 @@ for {
 }
 ```
 
-В шаблоне три обязательные детали. `defer cl.Close()` нужен, иначе финальный коммит не уйдёт и последние секунды чтения растворятся при рестарте. Проверка ошибок нужна, иначе контекст-cancel приведёт к бесконечному циклу с тихими ошибками (PollFetches возвращает пустой fetches.Records() и тут же снова блокируется). Передача `ctx` именно в `PollFetches` (без подмены на `context.Background()`) и есть точка, через которую SIGINT доходит до клиента. В лекциях 03-х к этому добавится manual commit; шаблон останется тот же, перед `cl.Close()` появится `cl.CommitUncommittedOffsets(ctx)`.
+В шаблоне три обязательные детали. `defer cl.Close()` нужен, иначе клиент не покинет группу корректно (координатор узнает о смерти только по `session.timeout.ms`, и до тех пор партиции не достанутся другим членам). Сам по себе `Close()` финального commit'а **не делает** при кастомном `OnPartitionsRevoked` - это явно сказано в [docs franz-go](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo#Client.Close); до пяти секунд last reads остаются незакоммиченными. Проверка ошибок нужна, иначе контекст-cancel приведёт к бесконечному циклу с тихими ошибками (PollFetches возвращает пустой fetches.Records() и тут же снова блокируется). Передача `ctx` именно в `PollFetches` (без подмены на `context.Background()`) и есть точка, через которую SIGINT доходит до клиента. В лекциях 03-х к этому добавится manual commit; шаблон останется тот же, перед `cl.Close()` появится `cl.CommitUncommittedOffsets(ctx)`.
 
 ## Что показывает наш код
 
@@ -162,10 +162,13 @@ cl, err := kafka.NewClient(opts...)
 ```go
 for {
     fetches := cl.PollFetches(ctx)
+    if fetches.IsClientClosed() {
+        return nil
+    }
     if errs := fetches.Errors(); len(errs) > 0 {
         for _, e := range errs {
             if errors.Is(e.Err, context.Canceled) {
-                fmt.Println("kitchen-service остановлен по сигналу, offset'ы коммитятся в Close().")
+                fmt.Println("kitchen-service остановлен по сигналу.")
                 return nil
             }
             return fmt.Errorf("fetch %s/%d: %w", e.Topic, e.Partition, e.Err)
@@ -183,7 +186,7 @@ for {
 }
 ```
 
-Финальный коммит делает `defer cl.Close()`. Без него последние пять секунд чтения могут не уйти в `__consumer_offsets`, и при рестарте те же `OrderPlaced` прилетят заново.
+`defer cl.Close()` корректно покидает группу и закрывает соединения, но финального коммита **не делает** - с кастомным `OnPartitionsRevoked` дефолтный commit-on-revoke отключён. До пяти секунд reads могут не уйти в `__consumer_offsets`, и при рестарте те же `OrderPlaced` прилетят заново. В модуле 03 чиним явным `cl.CommitUncommittedOffsets(ctx)` перед `Close()`.
 
 Ожидаемый вывод после `make run` на свежесозданной группе с 10 `OrderPlaced` в трёх партициях:
 
@@ -274,6 +277,6 @@ make group-delete
 2. **Внутри группы одна партиция = один читатель**. Параллелизм чтения упирается в число партиций топика. Лишние инстансы простаивают.
 3. **PollFetches возвращает Fetches → Topics → Partitions → Records**. На уровне приложения почти всегда работаешь через `EachRecord` или `EachPartition`.
 4. **Auto-commit лжёт по дефолту**. Он коммитит позицию чтения, никак не связанную с фактом обработки в коде. В модуле 03 будем чинить.
-5. **Завершение через `cl.Close()` плюс ctx из runctx**. Без `defer cl.Close()` теряются последние секунды committed offset'а; без `ctx` в `PollFetches` не вылезешь из цикла на SIGINT.
+5. **Завершение через `cl.Close()` плюс ctx из runctx**. `cl.Close()` корректно покидает группу и закрывает соединения; при override-нутом `OnPartitionsRevoked` финального commit'а он не делает - до пяти секунд last reads могут потеряться. Чиним явным `CommitUncommittedOffsets` в модуле 03. Без `ctx` в `PollFetches` не вылезешь из цикла на SIGINT.
 
 Дальше модуль 02. Возвращаемся к продьюсеру и копаем, что там было «по умолчанию»: [Ключи и партиционирование](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md), [Acks и durability](../../../../02-producer/02-02-acks-and-durability/i18n/ru/README.md), [Идемпотентный продьюсер](../../../../02-producer/02-03-idempotent-producer/i18n/ru/README.md), [Батчинг и пропускная способность](../../../../02-producer/02-04-batching-and-throughput/i18n/ru/README.md), [Ошибки, retries и headers](../../../../02-producer/02-05-errors-retries-headers/i18n/ru/README.md). А там и модуль 03 рядом - именно он сделает из этого «голого» консьюмера производственный.

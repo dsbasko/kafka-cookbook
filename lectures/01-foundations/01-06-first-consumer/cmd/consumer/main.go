@@ -101,7 +101,7 @@ func run(ctx context.Context, o runOpts) error {
 				if errors.Is(e.Err, context.Canceled) {
 					_ = tw.Flush()
 					fmt.Println()
-					fmt.Println("kitchen-service остановлен по сигналу, offset'ы коммитятся в Close().")
+					fmt.Println("kitchen-service остановлен по сигналу.")
 					return nil
 				}
 				return fmt.Errorf("fetch %s/%d: %w", e.Topic, e.Partition, e.Err)

@@ -142,7 +142,7 @@ The sandbox must be running (`docker compose up -d` from the repo root).
 make run
 ```
 
-Expected output (IDs and leaders will differ on your machine):
+Expected output (IDs and leaders will differ on your machine; the Russian phrase is intentional - the Go program prints it as-is):
 
 ```
 brew-topic "brew.orders.v1" создан: partitions=3 rf=3

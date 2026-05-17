@@ -206,7 +206,7 @@ fmt.Fprintf(tw, "TOTAL\t%d\n", total)
 Что увидишь в выводе:
 
 ```
-topic "brew.orders.v1" создан: partitions=3 rf=3
+brew-topic "brew.orders.v1" создан: partitions=3 rf=3
 
 пишем 10 OrderPlaced в топик "brew.orders.v1" через ProduceSync
 

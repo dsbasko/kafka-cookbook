@@ -93,6 +93,9 @@ func run(ctx context.Context, o runOpts) error {
 
 	for {
 		fetches := cl.PollFetches(ctx)
+		if fetches.IsClientClosed() {
+			return nil
+		}
 		if errs := fetches.Errors(); len(errs) > 0 {
 			for _, e := range errs {
 				if errors.Is(e.Err, context.Canceled) {

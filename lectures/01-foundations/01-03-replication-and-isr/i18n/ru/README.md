@@ -144,7 +144,7 @@ make kill-broker
 PARTITION  LEADER  REPLICAS  ISR    UNDER-REPLICATED
 0          1       [1 2 3]   [1 3]  yes (missing [2])
 1          3       [1 2 3]   [1 3]  yes (missing [2])
-2          1       [1 2 3]   [1 3]  no   <- leader сразу был 1, replica id=2 пока ещё в ISR
+2          1       [1 2 3]   [1 2 3]  no   <- leader сразу был 1, replica id=2 пока ещё в ISR
 ---
 ```
 

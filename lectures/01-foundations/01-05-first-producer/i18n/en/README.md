@@ -203,12 +203,12 @@ fmt.Fprintf(tw, "TOTAL\t%d\n", total)
 
 The sum of latest offsets across all partitions of a fresh topic equals the number of written messages. Run the program a second time and the sum becomes 20, and so on.
 
-What you will see in the output:
+What you will see in the output (the Russian phrases are intentional - the Go program prints them as-is; this README explains them):
 
 ```
-topic "brew.orders.v1" created: partitions=3 rf=3
+brew-topic "brew.orders.v1" создан: partitions=3 rf=3
 
-writing 10 OrderPlaced to topic "brew.orders.v1" via ProduceSync
+пишем 10 OrderPlaced в топик "brew.orders.v1" через ProduceSync
 
 N  KEY      VALUE                              PARTITION  OFFSET  BROKER-TS
 0  order-0  OrderPlaced order_id=order-0        0          0       16:55:01.234
@@ -222,7 +222,7 @@ N  KEY      VALUE                              PARTITION  OFFSET  BROKER-TS
 8  order-8  OrderPlaced order_id=order-8        1          2       16:55:01.283
 9  order-9  OrderPlaced order_id=order-9        0          3       16:55:01.289
 
-done. Now the same picture from the log side:
+готово. Смотрим ту же картину со стороны лога:
 PARTITION  LATEST
 0          4
 1          3

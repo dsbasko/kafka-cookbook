@@ -1,7 +1,7 @@
 .PHONY: help run kill-broker restore-broker topic-describe topic-delete build
 
 KAFKA_BOOTSTRAP ?= localhost:19092,localhost:19093,localhost:19094
-TOPIC ?= lecture-01-03-replicated
+TOPIC ?= brew.orders.v1
 PARTITIONS ?= 3
 RF ?= 3
 INTERVAL ?= 2s

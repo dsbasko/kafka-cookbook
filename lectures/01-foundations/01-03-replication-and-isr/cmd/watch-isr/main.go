@@ -1,3 +1,16 @@
+// Программа watch-isr - инструмент наблюдения за ISR (In-Sync Replicas) топика
+// `brew.orders.v1` на стенде Brew. После Friday-промо Brew перешёл на RF=3 и
+// min.insync.replicas=2 для топика заказов; чтобы дежурный видел, в каком
+// состоянии репликация в данный момент, нужна простая утилита, печатающая
+// per-partition leader/replicas/ISR каждые N секунд.
+//
+// Логика проста: идемпотентно создаём топик `brew.orders.v1` (если уже есть -
+// используем существующий), запускаем тикер, на каждом тике дёргаем
+// admin.ListTopics и печатаем колонки PARTITION/LEADER/REPLICAS/ISR с признаком
+// under-replicated. Если оператор Brew гасит kafka-2 через `make kill-broker`,
+// под колонкой ISR видно, как реплика выпадает; после `make restore-broker` -
+// возвращается обратно. Запросы admin'а не меняем под domain Brew: API про
+// metadata партиций не зависит от того, какой именно топик мы наблюдаем.
 package main
 
 import (
@@ -19,7 +32,7 @@ import (
 )
 
 const (
-	defaultTopic       = "lecture-01-03-replicated"
+	defaultTopic       = "brew.orders.v1"
 	defaultPartitions  = 3
 	defaultReplication = 3
 	defaultInterval    = 2 * time.Second
@@ -28,7 +41,7 @@ const (
 func main() {
 	logger := log.New()
 
-	topic := flag.String("topic", defaultTopic, "топик, который создаём и наблюдаем")
+	topic := flag.String("topic", defaultTopic, "brew-топик, который создаём и наблюдаем")
 	partitions := flag.Int("partitions", defaultPartitions, "число партиций при создании")
 	rf := flag.Int("rf", defaultReplication, "replication factor при создании")
 	interval := flag.Duration("interval", defaultInterval, "пауза между опросами metadata")
@@ -55,7 +68,7 @@ func run(ctx context.Context, topic string, partitions int32, rf int16, interval
 		return fmt.Errorf("ensure topic: %w", err)
 	}
 
-	fmt.Printf("watching ISR for topic=%q every %s (Ctrl+C to stop)\n\n", topic, interval)
+	fmt.Printf("watching ISR for brew-topic=%q every %s (Ctrl+C to stop)\n\n", topic, interval)
 
 	if once {
 		return tick(ctx, admin, topic)
@@ -106,7 +119,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, topic string, partitio
 
 	resp, err := admin.CreateTopic(rpcCtx, partitions, rf, nil, topic)
 	if err == nil && resp.Err == nil {
-		fmt.Printf("topic %q создан: partitions=%d rf=%d\n", topic, partitions, rf)
+		fmt.Printf("brew-topic %q создан: partitions=%d rf=%d\n", topic, partitions, rf)
 		return nil
 	}
 
@@ -115,7 +128,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, topic string, partitio
 		cause = resp.Err
 	}
 	if errors.Is(cause, kerr.TopicAlreadyExists) {
-		fmt.Printf("topic %q уже существует — наблюдаем\n", topic)
+		fmt.Printf("brew-topic %q уже существует - наблюдаем\n", topic)
 		return nil
 	}
 	return cause

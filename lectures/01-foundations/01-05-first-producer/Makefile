@@ -1,17 +1,17 @@
 .PHONY: help run topic-create topic-describe topic-delete consume-cli build
 
 KAFKA_BOOTSTRAP ?= localhost:19092,localhost:19093,localhost:19094
-TOPIC ?= lecture-01-05-first-producer
+TOPIC ?= brew.orders.v1
 PARTITIONS ?= 3
 RF ?= 3
 MESSAGES ?= 10
 
 help:
-	@echo "make run            - записать $(MESSAGES) сообщений в топик через ProduceSync"
+	@echo "make run            - записать $(MESSAGES) OrderPlaced в $(TOPIC) через ProduceSync"
 	@echo "make topic-create   - то же самое (alias для run; топик создаётся идемпотентно)"
-	@echo "make topic-describe - kafka-topics.sh --describe для топика"
+	@echo "make topic-describe - kafka-topics.sh --describe для $(TOPIC)"
 	@echo "make consume-cli    - kafka-console-consumer изнутри kafka-1, читает с начала"
-	@echo "make topic-delete   - удалить топик после лекции"
+	@echo "make topic-delete   - удалить $(TOPIC) после лекции"
 	@echo "make build          - go build ./..."
 
 run:

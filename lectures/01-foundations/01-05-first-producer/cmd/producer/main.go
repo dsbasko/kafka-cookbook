@@ -1,3 +1,10 @@
+// Утилита первого продьюсера для лекции 01-05.
+//
+// Контекст Brew: order-service пишет в brew.orders.v1 первые OrderPlaced
+// после миграции с RabbitMQ на Kafka. Сценарий учебный - 10 записей через
+// ProduceSync с ключом order-N, без батчинга и compression. Цель - увидеть
+// пары (partition, offset), которые брокер возвращает в kgo.ProduceResults,
+// и сверить их с end-offsets через kadm.ListEndOffsets.
 package main
 
 import (
@@ -19,7 +26,7 @@ import (
 )
 
 const (
-	defaultTopic       = "lecture-01-05-first-producer"
+	defaultTopic       = "brew.orders.v1"
 	defaultPartitions  = 3
 	defaultReplication = 3
 	defaultMessages    = 10
@@ -43,7 +50,7 @@ func main() {
 		rf:         int16(*rf),
 		messages:   *messages,
 	}); err != nil {
-		logger.Error("first-producer failed", "err", err)
+		logger.Error("brew-producer failed", "err", err)
 		os.Exit(1)
 	}
 }
@@ -67,7 +74,7 @@ func run(ctx context.Context, o runOpts) error {
 		return fmt.Errorf("ensure topic: %w", err)
 	}
 
-	fmt.Printf("пишем %d сообщений в топик %q через ProduceSync\n\n", o.messages, o.topic)
+	fmt.Printf("пишем %d OrderPlaced в топик %q через ProduceSync\n\n", o.messages, o.topic)
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "N\tKEY\tVALUE\tPARTITION\tOFFSET\tBROKER-TS")
@@ -77,8 +84,8 @@ func run(ctx context.Context, o runOpts) error {
 			_ = tw.Flush()
 			return err
 		}
-		key := fmt.Sprintf("k-%d", i)
-		val := fmt.Sprintf("hello-%d", i)
+		key := fmt.Sprintf("order-%d", i)
+		val := fmt.Sprintf("OrderPlaced order_id=order-%d", i)
 		rec := &kgo.Record{
 			Topic: o.topic,
 			Key:   []byte(key),
@@ -112,7 +119,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, o runOpts) error {
 
 	resp, err := admin.CreateTopic(rpcCtx, o.partitions, o.rf, nil, o.topic)
 	if err == nil && resp.Err == nil {
-		fmt.Printf("topic %q создан: partitions=%d rf=%d\n\n", o.topic, o.partitions, o.rf)
+		fmt.Printf("brew-topic %q создан: partitions=%d rf=%d\n\n", o.topic, o.partitions, o.rf)
 		return nil
 	}
 	cause := err
@@ -120,7 +127,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, o runOpts) error {
 		cause = resp.Err
 	}
 	if errors.Is(cause, kerr.TopicAlreadyExists) {
-		fmt.Printf("topic %q уже существует — пишем как есть\n\n", o.topic)
+		fmt.Printf("brew-topic %q уже существует - пишем как есть\n\n", o.topic)
 		return nil
 	}
 	return cause

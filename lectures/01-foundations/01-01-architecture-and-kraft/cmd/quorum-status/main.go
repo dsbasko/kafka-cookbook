@@ -1,3 +1,16 @@
+// Утилита quorum-status - то, чем Brew проверяет здоровье KRaft-кворума на
+// свежеподнятом стенде. Печатает: ClusterID, список брокеров,
+// MetadataControllerProxy (возврат от BrokerMetadata - proxy-маршрут до
+// контроллера; в KRaft он совпадает с активным Raft-лидером только в спокойном
+// состоянии кластера) и RaftLeader (возврат от DescribeQuorum по системному
+// топику __cluster_metadata - реально активный контроллер кворума).
+//
+// Зачем разделять. MetadataControllerProxy показывает, через какую ноду клиент
+// сходит за метаданными. RaftLeader показывает, кто сейчас держит лидерство в
+// Raft-группе. На спокойном кластере значения совпадают. На переходных режимах
+// (перевыборы, обслуживание контроллера) расходятся. Если смотреть только на
+// BrokerMetadata, можно принять proxy за лидера и долго ловить «кластер вроде
+// живой, а почему-то тормозит».
 package main
 
 import (
@@ -56,7 +69,7 @@ func run(ctx context.Context) error {
 
 	fmt.Printf("ClusterID:               %s\n", md.Cluster)
 	fmt.Printf("Brokers:                 %d\n", len(brokers))
-	fmt.Printf("MetadataControllerProxy: %d  (BrokerMetadata.Controller; в KRaft — proxy, не Raft-leader)\n", md.Controller)
+	fmt.Printf("MetadataControllerProxy: %d  (BrokerMetadata.Controller; в KRaft - proxy, не Raft-leader)\n", md.Controller)
 	if qErr != nil {
 		fmt.Printf("RaftLeader:              <недоступно: %v>\n", qErr)
 	} else {

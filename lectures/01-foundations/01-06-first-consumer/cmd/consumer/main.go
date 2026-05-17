@@ -1,3 +1,11 @@
+// Утилита первого консьюмера для лекции 01-06.
+//
+// Контекст Brew: kitchen-service на кофейне читает brew.orders.v1, чтобы
+// бариста видели новые OrderPlaced. Сценарий учебный - один процесс в группе
+// brew.kitchen-service с auto-commit, корректный shutdown по SIGINT. Без
+// manual commit, без DLQ, без retry-топиков. Цель - увидеть пары
+// (partition, offset) на стороне чтения и сверить их с тем, что вернул
+// ProduceSync в лекции 01-05.
 package main
 
 import (
@@ -17,14 +25,14 @@ import (
 )
 
 const (
-	defaultTopic = "lecture-01-05-first-producer"
-	defaultGroup = "lecture-01-06-group"
+	defaultTopic = "brew.orders.v1"
+	defaultGroup = "brew.kitchen-service"
 )
 
 func main() {
 	logger := log.New()
 
-	topic := flag.String("topic", defaultTopic, "топик, из которого читаем")
+	topic := flag.String("topic", defaultTopic, "брокер-топик, из которого читаем")
 	group := flag.String("group", defaultGroup, "group.id консьюмер-группы")
 	fromStart := flag.Bool("from-start", true,
 		"при первом старте группы читать с earliest (на втором запуске committed offset уже есть и этот флаг ни на что не влияет)")
@@ -41,7 +49,7 @@ func main() {
 		memberID:  memberID,
 		fromStart: *fromStart,
 	}); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("first-consumer failed", "err", err)
+		logger.Error("brew-consumer failed", "err", err)
 		os.Exit(1)
 	}
 }
@@ -57,7 +65,7 @@ func run(ctx context.Context, o runOpts) error {
 	opts := []kgo.Opt{
 		kgo.ConsumerGroup(o.group),
 		kgo.ConsumeTopics(o.topic),
-		kgo.ClientID(fmt.Sprintf("lecture-01-06-consumer-%s", o.memberID)),
+		kgo.ClientID(fmt.Sprintf("kitchen-service-%s", o.memberID)),
 		kgo.OnPartitionsAssigned(func(_ context.Context, _ *kgo.Client, m map[string][]int32) {
 			fmt.Fprintf(os.Stderr, "[member=%s] assigned: %v\n", o.memberID, m)
 		}),
@@ -75,9 +83,9 @@ func run(ctx context.Context, o runOpts) error {
 	}
 	defer cl.Close()
 
-	fmt.Printf("консьюмер запущен: topic=%q group=%q member=%s from-start=%v\n",
+	fmt.Printf("kitchen-service запущен: brew-topic=%q group=%q member=%s from-start=%v\n",
 		o.topic, o.group, o.memberID, o.fromStart)
-	fmt.Println("читаем; Ctrl+C — выход.")
+	fmt.Println("читаем brew-orders; Ctrl+C - выход.")
 	fmt.Println()
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -90,7 +98,7 @@ func run(ctx context.Context, o runOpts) error {
 				if errors.Is(e.Err, context.Canceled) {
 					_ = tw.Flush()
 					fmt.Println()
-					fmt.Println("остановлен по сигналу, offset'ы коммитятся в Close().")
+					fmt.Println("kitchen-service остановлен по сигналу, offset'ы коммитятся в Close().")
 					return nil
 				}
 				return fmt.Errorf("fetch %s/%d: %w", e.Topic, e.Partition, e.Err)

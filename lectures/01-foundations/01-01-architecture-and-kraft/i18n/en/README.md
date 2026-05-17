@@ -106,7 +106,7 @@ What this gives you in practice:
 - faster recovery after a controller fall (seconds rather than tens of seconds);
 - easier scaling to millions of partitions (the ZK ceiling is gone).
 
-One downside: the ecosystem is still catching up. Some tutorials and Stack Overflow answers still describe ZooKeeper. KRaft was declared production-ready in Kafka 3.5 and became the default starting with Kafka 4.0. The course sandbox runs 4.2.0, ZooKeeper isn't even mentioned.
+One downside: the ecosystem is still catching up. Some tutorials and Stack Overflow answers still describe ZooKeeper. KRaft was declared production-ready in Kafka 3.3 (KIP-833, October 2022) and became the default starting with Kafka 4.0. The course sandbox runs 4.2.0, ZooKeeper isn't even mentioned.
 
 ### Raft in one minute
 

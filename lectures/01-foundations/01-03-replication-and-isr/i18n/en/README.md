@@ -1,6 +1,6 @@
 # 01-03 - Replication and ISR
 
-In the previous lecture Brew recreated the `brew.orders.v1` topic with twelve partitions and ran `inspect`. Every line of the output had three columns:
+In the previous lecture Brew recreated the `brew.orders.v1` topic with three partitions and ran `inspect`. Every line of the output had three columns:
 
 ```
 PARTITION  LEADER  REPLICAS  ISR      OFFLINE
@@ -137,18 +137,7 @@ In a separate terminal:
 make kill-broker
 ```
 
-That's `docker stop kafka-2`. After a few seconds `watch-isr` shows:
-
-```
-[16:42:21]
-PARTITION  LEADER  REPLICAS  ISR    UNDER-REPLICATED
-0          1       [1 2 3]   [1 3]  yes (missing [2])
-1          3       [1 2 3]   [1 3]  yes (missing [2])
-2          1       [1 2 3]   [1 2 3]  no   <- leader was already 1, replica id=2 still in ISR
----
-```
-
-After 30 seconds (`replica.lag.time.max.ms`), replica id=2 drops from ISR for the last partition too:
+That's `docker stop kafka-2`. The first ticks of `watch-isr` still show ISR=[1 2 3] on all three partitions - the broker is unreachable, but the leader keeps it in ISR for now. After `replica.lag.time.max.ms` (default 30 seconds), each partition's leader notices id=2 hasn't sent a fetch in a while and drops it from ISR. It fires for all partitions roughly at the same time - the timer is shared, because kafka-2 stopped sending fetches everywhere at once. Around 30 seconds after `docker stop`, `watch-isr` shows:
 
 ```
 [16:42:51]
@@ -307,4 +296,4 @@ make topic-delete
 - `RF=3 + min.insync.replicas=2 + acks=all` is the standard durable configuration. Survives one node failure. At ISR=1 `acks=all` starts returning `NotEnoughReplicas`.
 - `admin.ListTopics` shows everything needed to observe ISR. No shell scripts required.
 
-Next ([Offsets and retention](../../../01-04-offsets-and-retention/i18n/en/README.md)) we look at how messages live in time. We'll cover offset, log end offset, HWM, and retention. Along the way, we'll see why "our messages are stored for 7 days" is a phrase with a hidden catch.
+Next ([Offsets and retention](../../../01-04-offsets-and-retention/i18n/en/README.md)) we look at how messages live in time. We'll cover offset, log end offset, HWM, and retention. Along the way, we'll see why "our messages are stored for exactly N days" is a phrase with a hidden catch.

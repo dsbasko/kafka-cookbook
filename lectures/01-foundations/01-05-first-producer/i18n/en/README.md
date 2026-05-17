@@ -95,7 +95,7 @@ This is the middle ground: latency is lower than `all`, the guarantee is stronge
 
 The price of `acks=all` is latency. It adds one network round-trip between the leader and followers in the same rack (1-3ms on the Brew sandbox). For critical topics that is a bargain. For metrics with hundreds of thousands of events per second it is noticeable.
 
-In franz-go the default is `acks=all`. Reasonable. Brew **explicitly** writes `kgo.RequiredAcks(kgo.AllISRAcks())` in the producer template - so the default is visible in the code and not guessed from documentation. `brew.orders.v1` and `brew.payments.v1` use `acks=all`, and nobody plans to change that. The detailed walkthrough of `acks` and related guarantees lives in [Acks and durability](../../../../02-producer/02-02-acks-and-durability/i18n/en/README.md).
+In franz-go the default is already `acks=all` (the `kgo.RequiredAcks(kgo.AllISRAcks())` option). This lecture's producer relies on that default - the option is not set explicitly. `brew.orders.v1` and `brew.payments.v1` use `acks=all`, and nobody plans to change that. The detailed walkthrough of `acks` and related guarantees lives in [Acks and durability](../../../../02-producer/02-02-acks-and-durability/i18n/en/README.md).
 
 ## Idempotency - the double-charge story
 
@@ -124,7 +124,7 @@ The idea is simple. Each network round-trip to the broker costs ~1ms (LAN). One 
 
 The parameters that drive this:
 
-- `linger.ms` - how long to buffer before sending. Default 0 (immediate), production ranges 5-20ms.
+- `linger.ms` - how long to buffer before sending. The Java client default is 0 (immediate); franz-go's default is already 10ms, so the lecture's producer gets reasonable batching out of the box. Production ranges 5-20ms.
 - `batch.size` (in franz-go that is `ProducerBatchMaxBytes`) - the per-batch byte cap. Default 1MB, larger for big payloads.
 - `compression.type` - `none`, `gzip`, `snappy`, `lz4`, `zstd`. On Brew's JSON payloads zstd compresses 3-5x; the saving applies to network **and** broker disk.
 - `max.in.flight.requests.per.connection` - how many unacknowledged batches to keep in flight at once. With the idempotent producer franz-go keeps it ≤5 to preserve order.
@@ -236,7 +236,7 @@ Each record got **its own** offset within its partition. `OrderPlaced` for `orde
 
 Partition assignment is **deterministic**, not random. The same `order_id` always lands in the same partition. Restart the program with the same set of keys and the distribution repeats (but offsets advance because it is a new write on top of the existing log). The partitioner logic is covered in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md).
 
-The specific offset values and distribution in your output may differ. If you ran the program twice without `topic-delete`, all offsets will be 10 higher in total because the second run appended on top of the first. That is expected.
+If you ran the program twice without `topic-delete`, the specific offsets in your output will differ - all offsets will be 10 higher in total because the second run appended on top of the first. That's expected. The key-to-partition mapping stays the same: the same `order-N` always lands in the same partition.
 
 ## Running
 

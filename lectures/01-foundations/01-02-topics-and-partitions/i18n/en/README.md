@@ -80,7 +80,7 @@ Expansion also breaks the distribution. At N=3 → N=4, the same keys that lande
 
 The practical takeaway: plan the partition count upfront, with room to grow. The number of partitions is what your expected throughput / per-partition limit dictates. "10 partitions because it's a round number" is a poor compass. Rough estimate: a partition handles ~10-20 MB/s of writes and the same for reads. If you expect 100 MB/s, you want at least 6-8 partitions, better with headroom up to 12-16. This is empirical - detailed breakdown in [Sizing and tuning](../../../../08-operations/08-03-sizing-and-tuning/i18n/en/README.md).
 
-After the Friday promo Brew recreated `brew.orders.v1` with 12 partitions. The topic name stayed (no bump to `.v2`, because only the partition layout changed, not the event schema), but the partition count grew fourfold. Old keys, naturally, were redistributed across the new partitions, but Brew was ready: by the time of recreation, all events from the previous week were already mirrored into S3 for long-term storage, and live analytics ran on the fresh stream.
+After the Friday promo Brew recreated `brew.orders.v1` with three partitions instead of one. The topic name stayed (no bump to `.v2`, because only the partition layout changed, not the event schema), but the partition count tripled. Old keys, naturally, were redistributed across the new partitions, but Brew was ready: by the time of recreation, all events from the previous week were already mirrored into S3 for long-term storage, and live analytics ran on the fresh stream. The course sandbox stays at three from here on, so the output tables fit on screen.
 
 ## What the inspect program shows
 

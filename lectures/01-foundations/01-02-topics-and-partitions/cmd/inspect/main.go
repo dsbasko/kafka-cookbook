@@ -1,3 +1,9 @@
+// Программа inspect - утилита Brew для лекции 01-02. Создаёт топик
+// brew.orders.v1 идемпотентно и печатает per-partition таблицу с leader,
+// replicas и ISR, чтобы видеть, как Kafka раскидывает партиции по нодам
+// стенда. После пятничного промо «бесплатный кофе по пятницам» Brew
+// пересоздал брокер-топик с 12 партициями вместо одной - эта программа
+// показывает, что именно изменилось в metadata.
 package main
 
 import (
@@ -18,7 +24,7 @@ import (
 )
 
 const (
-	defaultTopic       = "lecture-01-02-orders"
+	defaultTopic       = "brew.orders.v1"
 	defaultPartitions  = 3
 	defaultReplication = 3
 )
@@ -26,7 +32,7 @@ const (
 func main() {
 	logger := log.New()
 
-	topic := flag.String("topic", defaultTopic, "топик, который создаём и описываем")
+	topic := flag.String("topic", defaultTopic, "brew-топик, который создаём и описываем (по умолчанию brew.orders.v1)")
 	partitions := flag.Int("partitions", defaultPartitions, "число партиций при создании")
 	rf := flag.Int("rf", defaultReplication, "replication factor при создании")
 	recreate := flag.Bool("recreate", false, "удалить топик перед созданием")
@@ -55,7 +61,7 @@ func run(ctx context.Context, topic string, partitions int32, rf int16, recreate
 		if err := deleteTopic(rpcCtx, admin, topic); err != nil {
 			return fmt.Errorf("delete topic: %w", err)
 		}
-		fmt.Printf("topic %q удалён\n", topic)
+		fmt.Printf("brew-topic %q удалён\n", topic)
 	}
 
 	created, err := ensureTopic(rpcCtx, admin, topic, partitions, rf)
@@ -63,9 +69,9 @@ func run(ctx context.Context, topic string, partitions int32, rf int16, recreate
 		return fmt.Errorf("ensure topic: %w", err)
 	}
 	if created {
-		fmt.Printf("topic %q создан: partitions=%d rf=%d\n", topic, partitions, rf)
+		fmt.Printf("brew-topic %q создан: partitions=%d rf=%d\n", topic, partitions, rf)
 	} else {
-		fmt.Printf("topic %q уже существует — описываем\n", topic)
+		fmt.Printf("brew-topic %q уже существует - описываем\n", topic)
 	}
 
 	details, err := admin.ListTopics(rpcCtx, topic)

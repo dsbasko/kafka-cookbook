@@ -1,16 +1,16 @@
 .PHONY: help run topic-create topic-describe topic-recreate topic-delete build
 
 KAFKA_BOOTSTRAP ?= localhost:19092,localhost:19093,localhost:19094
-TOPIC ?= lecture-01-02-orders
+TOPIC ?= brew.orders.v1
 PARTITIONS ?= 3
 RF ?= 3
 
 help:
-	@echo "make run              - создать топик идемпотентно и распечатать leader/replicas/ISR per-partition"
+	@echo "make run              - создать brew-топик идемпотентно и распечатать leader/replicas/ISR per-partition"
 	@echo "make topic-create     - то же самое, явная цель (alias для run)"
-	@echo "make topic-describe   - описать топик через kafka-topics.sh внутри kafka-1 для сравнения"
+	@echo "make topic-describe   - описать brew-топик через kafka-topics.sh внутри kafka-1 для сравнения"
 	@echo "make topic-recreate   - удалить и создать заново (видно перераспределение leader'ов)"
-	@echo "make topic-delete     - удалить топик через kafka-topics.sh"
+	@echo "make topic-delete     - удалить brew-топик через kafka-topics.sh"
 	@echo "make build            - go build ./..."
 
 run:

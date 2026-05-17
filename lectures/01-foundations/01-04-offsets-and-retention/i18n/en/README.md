@@ -110,9 +110,9 @@ The `__consumer_offsets` topic uses `compact` exactly for the reason we mentione
 
 ## What load-and-watch shows
 
-`cmd/load-and-watch/main.go` builds a small retention sandbox on top of `brew.orders.v1`. It creates the topic with `partitions=3`, `rf=3`, **`retention.ms=60000`** (one minute), **`segment.ms=10000`** (ten seconds). Those are demo numbers: in production at Brew, as we saw above, `brew.orders.v1` has retention of 30 days. But to see old segments disappear in five minutes, retention is dialed down to a minute.
+`cmd/load-and-watch/main.go` builds a small retention sandbox on a dedicated training topic, `brew.orders.retention-demo`. It deliberately does not touch the real `brew.orders.v1` (30-day retention), so the neighboring lectures 01-05 and 01-06 keep working with a clean `brew.orders.v1` instead of inheriting a partition where records evaporate within a minute. It creates the demo topic with `partitions=3`, `rf=3`, **`retention.ms=60000`** (one minute), **`segment.ms=10000`** (ten seconds). Those are demo numbers - dialed down so you can watch old segments disappear within five minutes.
 
-Idempotent. If the topic already exists, the config is updated via `AlterTopicConfigs` - it does not crash and does not get stuck with stale retention. Then it writes 100 "orders" via `ProduceSync` with keys `order-0..order-99` and payloads like `OrderPlaced order_id=order-N` - emulating the Friday promo order surge (for hash partitioning, see [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)).
+Idempotent. If the demo topic already exists, the config is updated via `AlterTopicConfigs` - it does not crash and does not get stuck with stale retention. Then it writes 100 "orders" via `ProduceSync` with keys `order-0..order-99` and payloads like `OrderPlaced order_id=order-N` - emulating the Friday promo order surge (for hash partitioning, see [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)).
 
 Topic configs are passed directly to `CreateTopic` as the fourth argument - a `name → *string` map:
 

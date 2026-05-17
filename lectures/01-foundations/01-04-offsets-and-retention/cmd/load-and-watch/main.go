@@ -1,10 +1,11 @@
 // Утилита load-and-watch для лекции 01-04. Готовит маленькую песочницу
-// retention'а на топике brew.orders.v1: создаёт его с короткими retention.ms
-// и segment.ms, заливает 100 сообщений-«заказов» и потом каждые 10 секунд
-// печатает earliest/latest/retained per-partition. На стенде Brew у настоящего
-// brew.orders.v1 retention 30 дней - здесь специально опускаем до минуты,
-// чтобы в течение 5-7 минут увидеть как retention-checker удаляет старые
-// сегменты и earliest на партиции прыгает вверх.
+// retention'а на отдельном тренировочном топике brew.orders.retention-demo:
+// создаёт его с короткими retention.ms и segment.ms, заливает 100 сообщений-
+// «заказов» и потом каждые 10 секунд печатает earliest/latest/retained
+// per-partition. Настоящий brew.orders.v1 на стенде Brew живёт с retention
+// 30 дней и не трогается этой утилитой - демо использует отдельное имя
+// специально, чтобы лекции 01-05 и 01-06 потом работали с чистым
+// brew.orders.v1 без риска что записи испарятся через минуту.
 package main
 
 import (
@@ -28,7 +29,7 @@ import (
 )
 
 const (
-	defaultTopic       = "brew.orders.v1"
+	defaultTopic       = "brew.orders.retention-demo"
 	defaultPartitions  = 3
 	defaultReplication = 3
 	defaultMessages    = 100

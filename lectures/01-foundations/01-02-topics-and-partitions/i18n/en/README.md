@@ -8,7 +8,7 @@ This lecture is about cutting a topic into multiple partitions and why you'd wan
 
 A topic is a named channel that producers write to and consumers read from. At the model level it's straightforward: name the topic `brew.orders.v1` and orders flow there; name it `brew.payments.v1` and payments flow there. No exchanges or routing keys, unlike RabbitMQ. Messages simply live under that name.
 
-At the physical level (which [01-01](../../../01-01-architecture-and-kraft/i18n/ru/README.md) already touched) a topic is a directory on the broker's disk. Inside the directory are log files split into segments. When a segment reaches `segment.bytes` or `segment.ms`, it closes and a new one opens. Old segments are dropped by retention (see [Offsets and retention](../../../01-04-offsets-and-retention/i18n/ru/README.md)). That's everything at the physical level. No magic.
+At the physical level (which [01-01](../../../01-01-architecture-and-kraft/i18n/en/README.md) already touched) a topic is a directory on the broker's disk. Inside the directory are log files split into segments. When a segment reaches `segment.bytes` or `segment.ms`, it closes and a new one opens. Old segments are dropped by retention (see [Offsets and retention](../../../01-04-offsets-and-retention/i18n/en/README.md)). That's everything at the physical level. No magic.
 
 The name `brew.orders.v1` is not accidental. Brew picked the scheme `<domain>.<entity>.v<version>` so that a breaking change in event format can ship as `brew.orders.v2` next to the old topic. Producers cut over to the new schema, consumers migrate at their own pace, the old `brew.orders.v1` lives until nothing reads it any more, then it's deleted. Versioning at the topic level is the standard pattern in Kafka, because schema is per-topic and evolving it in place is painful.
 
@@ -16,14 +16,14 @@ But if a topic were a single file, everything would bottleneck on one node. One 
 
 ## Partition - the unit of parallelism
 
-A partition is a shard of a topic. An independent append-only log. Topic `brew.orders.v1` with three partitions is three independent logs: `brew.orders.v1-0`, `brew.orders.v1-1`, `brew.orders.v1-2`. Each partition lives on its own set of brokers (covered in [Replication and ISR](../../../01-03-replication-and-isr/i18n/ru/README.md)), and each has its own leader - the broker through which writes flow.
+A partition is a shard of a topic. An independent append-only log. Topic `brew.orders.v1` with three partitions is three independent logs: `brew.orders.v1-0`, `brew.orders.v1-1`, `brew.orders.v1-2`. Each partition lives on its own set of brokers (covered in [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)), and each has its own leader - the broker through which writes flow.
 
 A backend analogy. If you sharded a PostgreSQL `orders` table by `customer_id` across 16 shards on 4 machines, each machine would become a mini-leader of its slice. A Kafka partition is the same idea, but baked into the broker: sharding "out of the box", with all the machinery of telling producers about the new leader, rebalancing on a node failure, and replicating within a partition - already provided.
 
 All the other Kafka properties flow from this model:
 
 - writes parallelize: producers can write to different partitions through different leaders simultaneously;
-- reads parallelize: multiple consumers in the same group divide partitions among themselves (one consumer per partition maximum, see [01-06](../../../01-06-first-consumer/i18n/ru/README.md));
+- reads parallelize: multiple consumers in the same group divide partitions among themselves (one consumer per partition maximum, see [01-06](../../../01-06-first-consumer/i18n/en/README.md));
 - storage scales horizontally: more partitions means more even distribution across brokers;
 - ordering is guaranteed only within a partition; across partitions it doesn't exist in general.
 
@@ -36,7 +36,7 @@ When a producer writes, it sends `(topic, key, value)`. The client then decides 
 - if `key` is empty: round-robin or sticky partitioner (the default in franz-go is sticky: it accumulates a batch and sends it to one partition for efficiency);
 - if `key` is present: `partition = hash(key) mod N`, where N is the number of partitions.
 
-The default hash is murmur2 (same as the Java client, so Go and Java write to the same partition for the same key). You can set a custom one via `kgo.Partitioner`. This is covered in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md); for now the key fact is: the key decides the partition via simple arithmetic.
+The default hash is murmur2 (same as the Java client, so Go and Java write to the same partition for the same key). You can set a custom one via `kgo.Partitioner`. This is covered in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md); for now the key fact is: the key decides the partition via simple arithmetic.
 
 This formula leads to the property interviewers love. Messages with the same key land in the same partition. Guaranteed. And therefore they are read in order. That's the "one-key, one-partition, one-order" guarantee.
 
@@ -68,7 +68,7 @@ The key is not decoration. It decides what Kafka can do for you and what it can'
 - **`customer_id`** - all events for one customer in one partition. Useful when a consumer builds a per-customer profile in a local cache: you can keep the cache per-partition without syncing with neighbours. The downside: a "hot" customer (a corporate account dropping 1000 orders a day) skews the partition - one partition becomes Pareto, the others idle.
 - **`shop_id`** - all orders for one cafe in one partition. Sounds right for `kitchen-service`: the barista in one cafe sees a clean stream without neighbours' noise. In practice it falls apart on Friday: the top cafe in the city centre takes 30% of all traffic, and its partition carries a third of the promo.
 
-Brew chose `order_id` for the orders and payments topics (per-order event ordering matters) and `shop_id` for the kitchen topic (baristas group by their own cafe, and the peaky partition is tolerable because that cafe also has more staff). There is no universally correct answer: every choice optimises one thing and breaks another. Later in the course ([02-01](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md)) we look at key choice under a microscope.
+Brew chose `order_id` for the orders and payments topics (per-order event ordering matters) and `shop_id` for the kitchen topic (baristas group by their own cafe, and the peaky partition is tolerable because that cafe also has more staff). There is no universally correct answer: every choice optimises one thing and breaks another. Later in the course ([02-01](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)) we look at key choice under a microscope.
 
 ## Why you cannot reduce the number of partitions
 
@@ -78,7 +78,7 @@ The reason is the `hash(key) mod N` formula. Brew created `brew.orders.v1` with 
 
 Expansion also breaks the distribution. At N=3 → N=4, the same keys that landed in partition 0 can now land in any of the four. So `kafka-topics --alter --partitions` is typically run on a fresh topic, or when a temporary key-ordering disruption is acceptable. On production topics this is not a one-click operation.
 
-The practical takeaway: plan the partition count upfront, with room to grow. The number of partitions is what your expected throughput / per-partition limit dictates. "10 partitions because it's a round number" is a poor compass. Rough estimate: a partition handles ~10-20 MB/s of writes and the same for reads. If you expect 100 MB/s, you want at least 6-8 partitions, better with headroom up to 12-16. This is empirical - detailed breakdown in [Sizing and tuning](../../../../08-operations/08-03-sizing-and-tuning/i18n/ru/README.md).
+The practical takeaway: plan the partition count upfront, with room to grow. The number of partitions is what your expected throughput / per-partition limit dictates. "10 partitions because it's a round number" is a poor compass. Rough estimate: a partition handles ~10-20 MB/s of writes and the same for reads. If you expect 100 MB/s, you want at least 6-8 partitions, better with headroom up to 12-16. This is empirical - detailed breakdown in [Sizing and tuning](../../../../08-operations/08-03-sizing-and-tuning/i18n/en/README.md).
 
 After the Friday promo Brew recreated `brew.orders.v1` with 12 partitions. The topic name stayed (no bump to `.v2`, because only the partition layout changed, not the event schema), but the partition count grew fourfold. Old keys, naturally, were redistributed across the new partitions, but Brew was ready: by the time of recreation, all events from the previous week were already mirrored into S3 for long-term storage, and live analytics ran on the fresh stream.
 
@@ -161,7 +161,7 @@ Things to note:
 
 - `LEADER` differs per partition - write load spreads across nodes;
 - `REPLICAS` shows three numbers (RF=3), and the order in the list is the preferred leader: the first entry is who the controller wants as leader (the controller tries, but doesn't always succeed immediately - leader election picks a live replica, not the "right" one);
-- `ISR == REPLICAS` means all replicas are in sync; at `acks=all` writes are acknowledged immediately (if a node went down, ISR would shrink, see [Replication and ISR](../../../01-03-replication-and-isr/i18n/ru/README.md));
+- `ISR == REPLICAS` means all replicas are in sync; at `acks=all` writes are acknowledged immediately (if a node went down, ISR would shrink, see [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md));
 - `OFFLINE` is empty - all replicas are alive.
 
 Compare with the CLI:
@@ -195,4 +195,4 @@ make topic-delete
 - Partitions can be added but not removed - otherwise the `hash(key) mod N` mapping breaks retroactively, and with it every per-key ordering guarantee.
 - `admin.ListTopics` returns metadata: per-partition leader, replicas, ISR - enough to understand the current topic state without a shell.
 
-Next ([Replication and ISR](../../../01-03-replication-and-isr/i18n/ru/README.md)) we dig into what `Replicas` and `ISR` actually mean - what "a replica fell behind" means, how ISR shrinks when a node goes down, and where `min.insync.replicas` fits in.
+Next ([Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)) we dig into what `Replicas` and `ISR` actually mean - what "a replica fell behind" means, how ISR shrinks when a node goes down, and where `min.insync.replicas` fits in.

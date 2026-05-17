@@ -1,39 +1,40 @@
-# 01-04 — Offsets and Retention
+# 01-04 - Offsets and Retention
 
-The previous lecture covered replication — how a message reaches disk and how many copies exist. This one shifts perspective. The message is on disk. How long does it stay there? And how does a client know where it is in the log?
+Last night at Brew the `notification-service` process died. The on-call engineer brought it back in a minute, but it had been down for three hours. During that time about twenty thousand `OrderPlaced` and as many `PaymentReceived` events landed in `brew.orders.v1`. Question for the on-call: what should the service read now? Catch up on everything it missed? Only new stuff? And where does Kafka even remember how far it had read before the crash?
 
-Both questions are answered by offset and retention. The concepts are straightforward. The catch is in the details.
+This lecture answers both questions. The first is about offset: every message in a partition has its own number, and the consumer keeps a bookmark "I was here." The second is about retention: Kafka deletes old messages on a timer by itself, and the bookmark may end up in a section of the log that is no longer on disk.
 
-## Offset — it's just a record number
+## Offset - just a record number
 
-Each partition is an ordered log. Records in that log are numbered sequentially: 0, 1, 2, 3, and so on. That number is the offset.
+A partition is an ordered append-only log (see [Topics and partitions](../../../01-02-topics-and-partitions/i18n/en/README.md)). Records in that log are numbered sequentially: 0, 1, 2, 3, and so on. That number is the offset. The broker assigns it on write: the producer writes `OrderPlaced`, the broker responds "received, partition=2 offset=17". The pair `(partition, offset)` then identifies the message uniquely and permanently.
 
-A few things worth noting upfront:
+Analogy for a backend engineer with PostgreSQL experience. An offset is similar to a `ctid` or a monotonic `id` of a row, only without UPDATEs: a record with offset=10 always came before the record with offset=11, and that fact stays true forever. This is the basic ordering guarantee within a partition.
 
-- An offset is a position in a **specific partition**. Offsets are independent across partitions. Partition-0 at offset=42 and partition-1 at offset=42 are completely unrelated records.
-- The broker assigns the offset on write — not the client. The producer writes, and the broker responds: "received, you got partition=2 offset=17". That pair (partition, offset) identifies the message uniquely and permanently.
-- Offsets grow monotonically. A record with offset=10 always came before the record with offset=11. This is the basic ordering guarantee within a partition.
+A few properties worth stating upfront:
 
-When a partition has messages, it always has two boundaries — earliest and latest. Earliest is the offset of the oldest live message. Latest is the offset that **the next write will receive** (one more than the offset of the most recent message already stored). On an empty topic, earliest=latest=0.
+- An offset lives in **a single partition**. Offsets are independent across partitions. Partition-0 at offset=42 and partition-1 at offset=42 are unrelated records.
+- The broker assigns the offset, not the client. The client cannot ask "please write this under offset=100" - the broker decides the next number.
+- Offsets grow monotonically. There are no holes in the numbering (technically, holes are possible for an idempotent producer after retries, but for the course model we treat that as a detail).
+- The offset survives a broker restart. The number lives on disk next to the message, not in RAM. A Kafka restart does not renumber anything.
 
-When a producer writes to a topic, latest grows. When retention sweeps old segments, earliest grows. The log "flows" — filled from the top, draining from the bottom.
+A partition at any moment has two boundaries. **Earliest** is the offset of the oldest live message, **latest** is the offset that the next write will receive (one more than the offset of the most recent stored message). On an empty partition earliest=latest=0. When `order-service` writes to the topic, latest grows. When retention sweeps old segments, earliest grows. The log "flows" - filled from the top, draining from the bottom.
 
-## Log end offset, HWM, and leader epoch — what these terms mean
+## LEO, HWM, and leader epoch - under the microscope
 
-This is where confusion starts. Worth sorting out once and for all.
+This is where confusion starts. Worth sorting out once.
 
-`Log End Offset (LEO)` — the position where the partition **leader** will write the next message. The offset of the "next record" that doesn't exist yet. The leader and each follower have their own LEO; the follower's LEO usually lags slightly because it pulls data asynchronously.
+`Log End Offset (LEO)` is the position where the partition **leader** will write the next message. The offset of the "next record" that doesn't exist yet. The leader and each follower have their own LEO; the follower's usually lags slightly because the follower pulls data asynchronously (for roles, see [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)).
 
-`High Watermark (HWM)` — the offset up to which a consumer is allowed to **read**. HWM = the minimum LEO across all replicas in the ISR. The idea is simple: until a message has been caught up by all ISR replicas, no one should see it — otherwise, after a failover, the new leader might not know about something a consumer already read. That would give us readable history that vanished after the switch. Kafka cannot allow that.
+`High Watermark (HWM)` is the offset up to which a consumer is allowed to **read**. HWM equals the minimum LEO across replicas in the ISR. The idea is simple: until a message has been picked up by all ISR replicas, nobody should see it. Otherwise, after a failover, the new leader would not remember something a consumer had already read - readable history that vanishes after the switch. Kafka cannot allow that.
 
-Between the leader's LEO and the HWM is a gap — records "committed by the leader but not yet replicated to ISR." Those records are already in the log, but invisible to the consumer.
+Between the leader's LEO and the HWM there is a gap - records the leader already accepted but the ISR has not caught up to. They physically sit in the log, but are invisible to the consumer.
 
-`Leader Epoch` — a separate story. A counter that increments on every leader change. It's needed to correctly truncate follower logs after a switch. The course lectures don't touch it directly; knowing it exists and fixes rare failover bugs is enough.
+`Leader Epoch` is a counter that ticks on every leader change. It is needed to correctly truncate follower logs after a switch - a rare invariant that fixes complex failover bugs. Knowing it exists is enough; we will not dig into it in this course.
 
-In code, `kadm.ListEndOffsets` returns an offset equivalent to the HWM (for an in-sync client, that's the leader's LEO bounded by the ISR — Kafka doesn't expose uncommitted records).
+In our code, `kadm.ListEndOffsets` returns an offset equivalent to the HWM (for an in-sync client, that's the leader's LEO bounded by the ISR - Kafka does not expose records that are not yet committed).
 
 ```
-partition: lecture-01-04-offsets-0
+partition: brew.orders.v1-0
 
   earliest                                       latest = HWM
      │                                              │
@@ -41,54 +42,79 @@ partition: lecture-01-04-offsets-0
    ┌──────────────────────────────────────────────┐
    │ msg msg msg msg msg msg msg msg msg msg msg  │
    └──────────────────────────────────────────────┘
-   offset:  17  18  19  20  21  22  23  24  25  26  27 ◄── next write lands here
+   offset:  17  18  19  20  21  22  23  24  25  26  27 ◄── next OrderPlaced lands here
 
    retained = latest - earliest = 27 - 17 = 10
 
    old segments (offsets 0..16) already deleted by retention
 ```
 
-## Retention — two axes on which the log ages
+## The consumer's bookmark - committed offset
 
-The parameter that answers "how long do messages live." There are two.
+Brokers assign offsets on write. But who remembers how far `notification-service` had read? The service itself remembers in memory while it is alive. But if the process dies and is brought back three hours later, memory is empty. An external bookmark mechanism is needed.
 
-`retention.ms` — by time. A log segment whose last record is older than `retention.ms` milliseconds is considered stale and deleted entirely. Default is 7 days (`604800000`).
+That mechanism is called the **committed offset**. The consumer periodically tells Kafka: "group `notification-service`, topic `brew.orders.v1`, partition=0 - I processed records 0..41, next time start from 42." That is a commit.
 
-`retention.bytes` — by size. When the total size of a partition on disk exceeds `retention.bytes`, the oldest segments are deleted until the size is back within bounds. Default is `-1`, meaning no size limit.
+Where does Kafka store these bookmarks? In a system topic called `__consumer_offsets`. Inside the sandbox it has 50 partitions (`offsets.topic.num.partitions=50` by default), the replication factor matches `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR` (3 on the Brew sandbox). Each record in `__consumer_offsets` is a regular Kafka message with key `(group, topic, partition)` and value "committed offset, metadata."
 
-The parameters are **not mutually exclusive**. A segment is deleted if it hits **either** limit. You can set retention.ms=7 days + retention.bytes=10 GB — the segment goes when it ages out or when the partition grows to 10 GB, whichever comes first. This is common in production: time for delivery guarantees to consumers, size to prevent a traffic spike from filling the disk.
+Important. **The committed offset is a pointer to the next record to read**, not to the last processed record. "Committed=42" means "I processed 0..41, read on starting from 42." A trivial detail, but people trip over it: write `lastProcessed` instead of `lastProcessed+1` and you'll re-read the same message every time.
 
-Here's the most common beginner mistake: "our retention.ms=86400000, so messages live exactly one day." No. They live **at least** one day and **at most** one day plus the duration of the active segment. The active segment (the one currently being written to) is never deleted. Retention looks at **the timestamp of the last record in a segment**, not individual messages. A message that landed at the very start of a segment's life will survive for retention.ms + segment.ms — until the segment closes, ages, and gets swept.
+When `notification-service` comes back, it goes to `__consumer_offsets`, finds the entry for its group and partition 0, reads the committed offset (say, 4781) and starts fetching from 4781. All 20,000 `OrderPlaced` events that arrived during the three-hour downtime get caught up in order - Kafka acts like a catch-up read queue.
 
-One more thing. Cleanup is deferred. The broker runs the retention checker once every `log.retention.check.interval.ms` (default 5 minutes). On the sandbox this is the default value — so in our demo `earliest` will jump in discrete steps every few minutes rather than moving smoothly.
+On the **first** start of a group there is no committed offset. What to do? That is decided by `auto.offset.reset`. The value `latest` means start from the end - the group sees only new events and skips everything that happened before launch. The value `earliest` means start from the beginning - the group rereads the log from offset=0, useful for analytics or state recovery. The value `none` fails with an error - useful in systems where "forgetting" a position must be visible and requires manual triage.
 
-## `__consumer_offsets` — where consumer positions live
+For Brew's `notification-service`, the setting is `latest`: on first launch you don't want to hammer customers with push notifications about orders from three weeks ago. For `analytics-service`, which recomputes aggregates, it's `earliest`. Details about the `__consumer_offsets` topic itself (record format, how Kafka picks the bookmark partition by `hash(group)`) are covered in [Offset commits](../../../../03-consumer/03-02-offset-commits/i18n/en/README.md). Here we fix the model: consumer position lives separately from data, in a system compacted topic.
 
-We said brokers assign offsets. But who remembers where a consumer stopped reading? The consumer itself — and also Kafka, if the consumer opted in.
+## Retention - two axes on which the log ages
 
-Inside the sandbox there's a system topic `__consumer_offsets`. 50 partitions (`offsets.topic.num.partitions=50` by default), replication factor matches `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR` (3 in our setup). A consumer group writes its commit there: "group `lecture-01-06-group`, topic `lecture-01-05-first-producer`, partition=0 — committed offset=42."
+The parameter that answers "how long do messages live in Kafka." There are two.
 
-A record in `__consumer_offsets` is a regular Kafka message. It's a compacted topic (cleanup.policy=compact, not delete) — it always holds the latest version of each key `(group, topic, partition)`. Old overwritten versions are removed by compaction; current ones are never removed. So positions survive broker restarts and are not lost to retention.
+`retention.ms` - by time. A log segment whose last record is older than `retention.ms` milliseconds is considered stale and deleted entirely. Default - 7 days (`604800000`).
 
-Important: **the offset in `__consumer_offsets` is a pointer to the next record to read.** "Consumer committed offset=42" means: "I processed records 0..41, start from 42 next time." That's exactly why on the first run of a consumer group Kafka sets the pointer to latest or earliest (based on `auto.offset.reset`) — there's no committed offset yet, so it needs to be initialized.
+`retention.bytes` - by size. When the total size of a partition on disk exceeds `retention.bytes`, the oldest segments are deleted until the size returns to bounds. Default `-1`, meaning no size limit.
 
-The [First consumer on franz-go](../../../01-06-first-consumer/i18n/en/README.md) lecture will open this topic through the consumer. Here we fix the model: consumer position is stored separately from the data, in a system compacted topic — and that's by design.
+The parameters are **not mutually exclusive**. A segment is deleted if it hits either limit. On critical Brew topics both are set: time for the "consumers have N days to catch up" guarantee, size so that a random traffic spike does not eat the disk. For `brew.orders.v1` it looks like this:
 
-## `cleanup.policy` — delete and compact
+```
+retention.ms     = 2592000000   # 30 days
+retention.bytes  = 53687091200  # 50 GiB per partition
+cleanup.policy   = delete
+segment.ms       = 86400000     # 1 day
+```
 
-Since we touched on `__consumer_offsets`, two lines on this. A topic has a `cleanup.policy` parameter that controls **how** Kafka cleans up the log.
+Right here is the most common beginner mistake. "We have retention.ms=86400000, so messages live exactly one day." No. They live **at least** one day and **at most** one day plus the duration of the active segment. The active segment (the one currently being written) is never deleted. Retention looks at the timestamp of the **last** record in a segment, not at each message individually. A message that landed at the very start of a segment's life will survive for `retention.ms + segment.ms` - until the segment closes, ages out, and gets swept.
 
-- `delete` — standard behavior. Old segments are deleted according to retention.ms / retention.bytes. This is for regular event topics.
-- `compact` — log compaction. No whole segments are deleted here. **Old versions of each key** are removed — the most recent record with key `K` lives forever (or until the next record with the same key). This is for state topics: latest user profile, latest config, committed consumer group offset.
-- `delete,compact` — hybrid. Segments are compacted by key, and anything older than retention is deleted entirely.
+One more thing. Cleanup is deferred. The broker runs the retention checker once every `log.retention.check.interval.ms` (default 5 minutes). On the Brew sandbox this is the default value - so in the demo below `earliest` will jump in discrete steps every few minutes, not smoothly.
 
-Compaction gets a thorough treatment in [Retention and compaction](../../../../08-operations/08-02-retention-and-compaction/i18n/en/README.md) — that's where it belongs. Here: know that there's more than one option, and `__consumer_offsets` uses `compact`, not `delete`.
+## Retention across Brew topics
 
-## What the code does
+Each Brew topic has its own retention tuned to its use profile:
 
-`cmd/load-and-watch/main.go` follows several steps. It creates the topic `lecture-01-04-offsets` with `partitions=3`, `rf=3`, **`retention.ms=60000`**, **`segment.ms=10000`**. Idempotent: if the topic already exists, the config is updated via `IncrementalAlterConfigs`. Then it writes 100 messages via `ProduceSync` with keys `k-0..k-99` — because the key is set, the partitioner places them deterministically across partitions (covered in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)).
+- `brew.orders.v1` - 30 days. Analysts build month-long funnels, order-state recovery after a bug requires replay.
+- `brew.payments.v1` - 30 days. Mirrors orders, financial audit requests monthly samples.
+- `brew.kitchen.v1` - 7 days. Operational kitchen events, nobody looks at them after a week.
+- `brew.delivery.v1` - 7 days. Courier tracking lives briefly, after delivery the record becomes useless.
 
-Topic configs are passed directly to `CreateTopic` as the fourth argument — a map of `name → *string`:
+What if accounting requires keeping financial events for 7 years for compliance? Kafka is not the right tool for that. Long-term storage in Brew is offloaded by a nightly job from `brew.payments.v1` into S3 (or into a data lake - depending on infrastructure). In this scenario Kafka is a fast month-long buffer, S3 is the archival store for years. Nobody tries to make Kafka hold seven years of data: it's expensive, inefficient (S3 is roughly 50x cheaper per gigabyte), and not what Kafka is designed for.
+
+## cleanup.policy - delete and compact
+
+Since we touched on `__consumer_offsets`, two words about the cleanup parameter itself. A topic has a `cleanup.policy` that controls **how** Kafka cleans up old data. Four behaviors are available:
+
+- `delete` - standard behavior, default. Old segments are deleted according to retention.ms / retention.bytes. This is for ordinary event topics: `brew.orders.v1`, `brew.payments.v1`, `brew.kitchen.v1`, `brew.delivery.v1` - all on `delete`.
+- `compact` - log compaction. No whole segments are deleted. **Old versions of each key** are removed - the most recent record with key `K` survives until a new one with the same key appears. This is for state topics: latest customer profile, latest config, latest committed offset of a group.
+- `delete,compact` - hybrid. Segments are compacted by key, then anything older than retention is dropped entirely. Useful when both a snapshot and a time bound are needed.
+- Unset. The topic inherits the broker default (`log.cleanup.policy`, usually `delete`). On the Brew sandbox this is what happens - topics do not declare `cleanup.policy` explicitly.
+
+The `__consumer_offsets` topic uses `compact` exactly for the reason we mentioned: there are millions of closing offsets, but only the latest position of a group matters. Compaction is treated in depth in [Retention and compaction](../../../../08-operations/08-02-retention-and-compaction/i18n/en/README.md), that's where it belongs. Here it's enough to know that there are several options and that `__consumer_offsets` uses `compact`.
+
+## What load-and-watch shows
+
+`cmd/load-and-watch/main.go` builds a small retention sandbox on top of `brew.orders.v1`. It creates the topic with `partitions=3`, `rf=3`, **`retention.ms=60000`** (one minute), **`segment.ms=10000`** (ten seconds). Those are demo numbers: in production at Brew, as we saw above, `brew.orders.v1` has retention of 30 days. But to see old segments disappear in five minutes, retention is dialed down to a minute.
+
+Idempotent. If the topic already exists, the config is updated via `AlterTopicConfigs` - it does not crash and does not get stuck with stale retention. Then it writes 100 "orders" via `ProduceSync` with keys `order-0..order-99` and payloads like `OrderPlaced order_id=order-N` - emulating the Friday promo order surge (for hash partitioning, see [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)).
+
+Topic configs are passed directly to `CreateTopic` as the fourth argument - a `name → *string` map:
 
 ```go
 configs := map[string]*string{
@@ -100,16 +126,14 @@ configs := map[string]*string{
 resp, err := admin.CreateTopic(rpcCtx, o.partitions, o.rf, configs, o.topic)
 ```
 
-If the topic already exists, we fall through to `AlterTopicConfigs` with `SetConfig` operations to bring the existing config in line. This way a repeated run doesn't crash or get stuck with stale retention values.
+After writing 100 messages, a 10-second ticker starts. On each tick it:
 
-After writing, a 10-second ticker starts. On each tick:
-
-1. Writes one heartbeat message `hb-N`. Why — explained below.
+1. Writes one heartbeat message `hb-N`. Why - below.
 2. Calls `kadm.ListStartOffsets` (earliest = log start offset).
 3. Calls `kadm.ListEndOffsets` (latest = HWM).
 4. Prints a table: PARTITION / EARLIEST / LATEST / RETAINED, plus TOTAL.
 
-In code, two back-to-back requests — both return a map of `(topic, partition) → offset`:
+In code, two back-to-back requests - both return a `(topic, partition) → offset` map:
 
 ```go
 starts, err := admin.ListStartOffsets(rpcCtx, topic) // earliest = log start
@@ -123,23 +147,12 @@ for i := range rows {
         rows[i].latest = eo.Offset
     }
 }
-// retained := latest - earliest — how many messages are live right now
+// retained := latest - earliest - how many messages are live right now
 ```
 
-The heartbeat write itself is a plain `ProduceSync` with key `hb-N`:
+Heartbeats are not decoration here. A segment closes based on `segment.ms` from the moment of the **last** write into it, and the active segment is never deleted. Without heartbeats, after the initial 100 messages the active segment would live forever - retention would remove nothing because the entire log would sit in one unclosed segment. A heartbeat every 10 seconds rolls the current segment: it closes per `segment.ms`, a new one opens in its place, and the closed one can now be picked up by retention.
 
-```go
-rec := &kgo.Record{
-    Topic: topic,
-    Key:   []byte(fmt.Sprintf("hb-%d", n)),
-    Value: []byte(fmt.Sprintf("heartbeat-%d", n)),
-}
-return cl.ProduceSync(rpcCtx, rec).FirstErr()
-```
-
-The heartbeat is needed because **a segment closes based on `segment.ms` from the last write into it**, and the active segment is never deleted. Without heartbeats, after the initial 100 messages the active segment lives forever — retention removes nothing, because the entire log sits in one unclosed segment. A heartbeat every 10 seconds rolls the current segment: it closes per `segment.ms`, a new one opens in its place — and the closed one can now be picked up by retention.
-
-What you'll see when you run it:
+What you will see when you run it:
 
 ```
 [16:42:11]  heartbeats=0
@@ -163,9 +176,9 @@ TOTAL      0         107     107
 ---
 ```
 
-After a minute or two, LATEST grew (heartbeats added), EARLIEST still 0. Old segments exist, but the retention checker hasn't run yet.
+After a minute, LATEST grew (heartbeats added), EARLIEST still 0. Old segments are stale already, but the retention checker has not run yet.
 
-After a few minutes (5–7, on the sandbox with the default `log.retention.check.interval.ms=300000`):
+After a few minutes (5-7, on the sandbox with the default `log.retention.check.interval.ms=300000`):
 
 ```
 [16:48:31]  heartbeats=37
@@ -177,9 +190,11 @@ TOTAL      100       197     97
 ---
 ```
 
-Here's the interesting part. EARLIEST on each partition jumped from 0 to 33–34. The retention checker ran, found segments whose max timestamp was older than 60s, and deleted them entirely. The original 100 records went with them — they're no longer readable by anyone. RETAINED shows "how many messages are currently in the log" — about 32 per partition (the recent heartbeats).
+Here is the interesting part. EARLIEST on each partition jumped from 0 to 33-34. The retention checker ran, found segments whose max timestamp was older than 60s, and deleted them entirely. The original 100 records went with them - they're no longer readable by anyone. RETAINED shows "how many messages are currently in the log" - about 32 per partition (the recent heartbeats).
 
-Leave the program running and the picture keeps drifting right. EARLIEST chases LATEST with a lag of `retention.ms + segment.ms + log.retention.check.interval.ms` — roughly 6–7 minutes.
+Leave the program running and the picture keeps drifting right. EARLIEST chases LATEST with a lag of `retention.ms + segment.ms + log.retention.check.interval.ms` - roughly 6-7 minutes.
+
+This scenario is a tiny model of what would have happened to `notification-service` after the three-hour downtime, had `brew.orders.v1` retention been shorter than three hours. The service would come back, fetch its committed offset from `__consumer_offsets`, get, say, 5000. It would ask the broker for records starting at 5000 - and get `OFFSET_OUT_OF_RANGE`, because retention had already swept that range. Subsequent behavior depends on `auto.offset.reset`: `latest` skips the gap and continues from the end, `earliest` starts from current earliest (not from 5000), `none` fails. Brew has 30-day retention on orders specifically so that this does not happen during typical incidents.
 
 ## Running
 
@@ -195,7 +210,7 @@ In a second terminal, useful to compare against the CLI in parallel:
 make topic-describe
 ```
 
-You get `kafka-topics.sh --describe` (RF, partitions, leader/replicas/ISR — familiar from [Topics and partitions](../../../01-02-topics-and-partitions/i18n/en/README.md) and [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)) plus `kafka-configs.sh --describe`, which shows the configured `retention.ms=60000`, `segment.ms=10000`, `cleanup.policy=delete`.
+You get `kafka-topics.sh --describe` (RF, partitions, leader/replicas/ISR - the picture from [Topics and partitions](../../../01-02-topics-and-partitions/i18n/en/README.md) and [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)) plus `kafka-configs.sh --describe`, which shows the configured `retention.ms=60000`, `segment.ms=10000`, `cleanup.policy=delete`.
 
 Restart from scratch:
 
@@ -203,7 +218,7 @@ Restart from scratch:
 make run RECREATE=true
 ```
 
-To test retention more aggressively — set retention=10s, segment=5s:
+To test retention more aggressively - set retention=10s, segment=5s:
 
 ```sh
 make run RETENTION=10s SEGMENT=5s
@@ -215,12 +230,13 @@ Clean up after the lecture:
 make topic-delete
 ```
 
-## Why any of this matters
+## Takeaways
 
-Three practical takeaways:
+Practical implications:
 
-1. **"Stored for X days" means up to X days plus the segment duration.** If the contract with consumers requires "guaranteed last 7 days available" — set retention.ms to 7 days with margin, not exactly. And remember the active segment stays open until it closes.
-2. **Earliest grows on its own.** A consumer that has fallen behind by more than the retention period will get `OFFSET_OUT_OF_RANGE` when trying to read its position — it simply doesn't exist in the log anymore. This is expected behavior, not a Kafka error. Configurable via `auto.offset.reset` (latest/earliest/none) — covered in [Offset commits](../../../../03-consumer/03-02-offset-commits/i18n/en/README.md).
-3. **Retention.bytes is your friend.** Without it, one misbehaving producer with oversized messages can fill a broker's disk overnight. On critical topics, always set both limits — time and size.
+1. **"Stored for X days" means up to X days plus the segment duration.** If the contract with consumers requires "guaranteed last 7 days available" - set retention.ms to 7 days with margin, not exactly. The active segment stays open until it closes and eats time on top.
+2. **Earliest grows on its own.** A consumer that has fallen behind by more than the retention period will get `OFFSET_OUT_OF_RANGE` when trying to read its position. It simply doesn't exist in the log anymore. This is expected Kafka behavior. Configurable via `auto.offset.reset` (latest/earliest/none) - details in [Offset commits](../../../../03-consumer/03-02-offset-commits/i18n/en/README.md).
+3. **Committed offset is a pointer to the next record.** Not to the last processed record. Mix them up and you will either re-read one message forever, or silently lose a record on startup.
+4. **Retention.bytes is your friend.** Without it, one misbehaving producer with oversized messages will fill a broker's disk overnight. On critical Brew topics, both limits are set - time and size. A spare disk ordered the day before a promo would have saved Brew from a couple of incidents.
 
-Next up — [First producer on franz-go](../../../01-05-first-producer/i18n/en/README.md) — the first producer. Write 10 messages and see how the offset returned by `ProduceSync` fits directly into the model we just covered.
+Next up - [First producer on franz-go](../../../01-05-first-producer/i18n/en/README.md) - we write the first `OrderPlaced` by hand and see how the offset returned by `ProduceSync` lands in exactly the model we covered here.

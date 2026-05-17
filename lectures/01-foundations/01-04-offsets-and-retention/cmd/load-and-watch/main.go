@@ -1,3 +1,10 @@
+// Утилита load-and-watch для лекции 01-04. Готовит маленькую песочницу
+// retention'а на топике brew.orders.v1: создаёт его с короткими retention.ms
+// и segment.ms, заливает 100 сообщений-«заказов» и потом каждые 10 секунд
+// печатает earliest/latest/retained per-partition. На стенде Brew у настоящего
+// brew.orders.v1 retention 30 дней - здесь специально опускаем до минуты,
+// чтобы в течение 5-7 минут увидеть как retention-checker удаляет старые
+// сегменты и earliest на партиции прыгает вверх.
 package main
 
 import (
@@ -21,7 +28,7 @@ import (
 )
 
 const (
-	defaultTopic       = "lecture-01-04-offsets"
+	defaultTopic       = "brew.orders.v1"
 	defaultPartitions  = 3
 	defaultReplication = 3
 	defaultMessages    = 100
@@ -87,7 +94,7 @@ func run(ctx context.Context, o runOpts) error {
 			return fmt.Errorf("delete topic: %w", err)
 		}
 		dropCancel()
-		fmt.Printf("topic %q удалён (recreate=true)\n", o.topic)
+		fmt.Printf("brew-topic %q удалён (recreate=true)\n", o.topic)
 	}
 
 	if err := ensureTopic(ctx, admin, o); err != nil {
@@ -97,10 +104,10 @@ func run(ctx context.Context, o runOpts) error {
 	if err := loadInitial(ctx, cl, o.topic, o.messages); err != nil {
 		return fmt.Errorf("load initial: %w", err)
 	}
-	fmt.Printf("записано %d сообщений в топик %q\n\n", o.messages, o.topic)
+	fmt.Printf("brew-orders: записано %d сообщений в топик %q\n\n", o.messages, o.topic)
 
-	fmt.Printf("watching offsets каждые %s (Ctrl+C — выход)\n", o.interval)
-	fmt.Printf("retention.ms=%s, segment.ms=%s — старые сегменты должны уходить через retention+интервал retention-checker'а\n\n",
+	fmt.Printf("watching offsets каждые %s (Ctrl+C - выход)\n", o.interval)
+	fmt.Printf("retention.ms=%s, segment.ms=%s - старые сегменты должны уходить через retention+интервал retention-checker'а\n\n",
 		o.retention, o.segment)
 
 	t := time.NewTicker(o.interval)
@@ -139,7 +146,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, o runOpts) error {
 
 	resp, err := admin.CreateTopic(rpcCtx, o.partitions, o.rf, configs, o.topic)
 	if err == nil && resp.Err == nil {
-		fmt.Printf("topic %q создан: partitions=%d rf=%d retention.ms=%d segment.ms=%d\n",
+		fmt.Printf("brew-topic %q создан: partitions=%d rf=%d retention.ms=%d segment.ms=%d\n",
 			o.topic, o.partitions, o.rf, o.retention.Milliseconds(), o.segment.Milliseconds())
 		return nil
 	}
@@ -151,7 +158,7 @@ func ensureTopic(ctx context.Context, admin *kadm.Client, o runOpts) error {
 		return cause
 	}
 
-	fmt.Printf("topic %q уже существует — подгоняем retention/segment\n", o.topic)
+	fmt.Printf("brew-topic %q уже существует - подгоняем retention/segment\n", o.topic)
 	alters := []kadm.AlterConfig{
 		{Op: kadm.SetConfig, Name: "retention.ms", Value: configs["retention.ms"]},
 		{Op: kadm.SetConfig, Name: "segment.ms", Value: configs["segment.ms"]},
@@ -188,11 +195,14 @@ func loadInitial(ctx context.Context, cl *kgo.Client, topic string, messages int
 	rpcCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Изображаем шквал заказов на промо «бесплатный кофе по пятницам»:
+	// 100 OrderPlaced подряд с ключом order_id, чтобы наполнить
+	// лог и потом наблюдать как retention его выкашивает.
 	for i := 0; i < messages; i++ {
 		rec := &kgo.Record{
 			Topic: topic,
-			Key:   []byte(fmt.Sprintf("k-%d", i)),
-			Value: []byte(fmt.Sprintf("msg-%d", i)),
+			Key:   []byte(fmt.Sprintf("order-%d", i)),
+			Value: []byte(fmt.Sprintf("OrderPlaced order_id=order-%d", i)),
 		}
 		if err := cl.ProduceSync(rpcCtx, rec).FirstErr(); err != nil {
 			return fmt.Errorf("produce %d: %w", i, err)
@@ -205,6 +215,9 @@ func writeHeartbeat(ctx context.Context, cl *kgo.Client, topic string, n int) er
 	rpcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	// Heartbeat нужен, чтобы активный сегмент закрывался по segment.ms:
+	// retention не трогает активный сегмент, без heartbeat'ов лог застрял бы
+	// в одном незакрытом сегменте и старые записи никогда не удалились бы.
 	rec := &kgo.Record{
 		Topic: topic,
 		Key:   []byte(fmt.Sprintf("hb-%d", n)),

@@ -1,7 +1,7 @@
 .PHONY: help run topic-create-short-retention topic-describe topic-delete build
 
 KAFKA_BOOTSTRAP ?= localhost:19092,localhost:19093,localhost:19094
-TOPIC ?= lecture-01-04-offsets
+TOPIC ?= brew.orders.v1
 PARTITIONS ?= 3
 RF ?= 3
 MESSAGES ?= 100

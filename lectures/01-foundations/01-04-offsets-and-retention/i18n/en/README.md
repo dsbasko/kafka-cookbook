@@ -183,14 +183,14 @@ After a few minutes (5-7, on the sandbox with the default `log.retention.check.i
 ```
 [16:48:31]  heartbeats=37
 PARTITION  EARLIEST  LATEST  RETAINED
-0          34        66      32
-1          33        65      32
-2          33        66      33
-TOTAL      100       197     97
+0          34        47      13
+1          33        45      12
+2          33        45      12
+TOTAL      100       137     37
 ---
 ```
 
-Here is the interesting part. EARLIEST on each partition jumped from 0 to 33-34. The retention checker ran, found segments whose max timestamp was older than 60s, and deleted them entirely. The original 100 records went with them - they're no longer readable by anyone. RETAINED shows "how many messages are currently in the log" - about 32 per partition (the recent heartbeats).
+Here is the interesting part. EARLIEST on each partition jumped from 0 to 33-34. The retention checker ran, found segments whose max timestamp was older than 60s, and deleted them entirely. The original 100 records went with them - they're no longer readable by anyone. RETAINED shows "how many messages are currently in the log" - about 12 per partition (the recent heartbeats).
 
 Leave the program running and the picture keeps drifting right. EARLIEST chases LATEST with a lag of `retention.ms + segment.ms + log.retention.check.interval.ms` - roughly 6-7 minutes.
 

@@ -46,8 +46,8 @@ func main() {
 	messages := flag.Int("messages", defaultMessages, "сколько сообщений записать на старте")
 	interval := flag.Duration("interval", defaultInterval, "пауза между опросами offset'ов и heartbeat-записями")
 	retention := flag.Duration("retention", defaultRetention, "retention.ms топика")
-	segment := flag.Duration("segment", defaultSegment, "segment.ms топика — после этого сегмент закрывается и может быть удалён по retention")
-	recreate := flag.Bool("recreate", false, "удалить топик перед созданием — обнуляет offset'ы и счётчик")
+	segment := flag.Duration("segment", defaultSegment, "segment.ms топика - после этого сегмент закрывается и может быть удалён по retention")
+	recreate := flag.Bool("recreate", false, "удалить топик перед созданием - обнуляет offset'ы и счётчик")
 	flag.Parse()
 
 	rootCtx, cancel := runctx.New()

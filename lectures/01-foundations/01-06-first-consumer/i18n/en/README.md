@@ -86,7 +86,7 @@ First trap: the commit records what has been **read**. Not what has been **proce
 
 Second trap: the interval. There are 5 seconds between two auto-commits. Crash inside that window and on restart you can get **duplicates** - records we already processed but Kafka never heard about will arrive again. This is at-least-once in the bad sense - without an idempotent handler, a duplicate `OrderPlaced` sends a barista to brew the same cappuccino twice.
 
-In short: auto-commit-by-default is at-most-once with a duplicate risk inside a 5-second window. Not great as a guarantee. [Offset commits](../../../../03-consumer/03-02-offset-commits/i18n/en/README.md) and [Processing guarantees](../../../../03-consumer/03-03-processing-guarantees/i18n/en/README.md) cover this in depth: manual commit, `MarkCommitRecords` + `CommitMarkedOffsets`, DB dedup, and idempotent handlers.
+In short: auto-commit-by-default gives neither at-most-once nor at-least-once - depending on where you crash relative to the 5-second window, you can get loss (first trap) or duplicates (second trap). Not great as a guarantee. [Offset commits](../../../../03-consumer/03-02-offset-commits/i18n/en/README.md) and [Processing guarantees](../../../../03-consumer/03-03-processing-guarantees/i18n/en/README.md) cover this in depth: manual commit, `MarkCommitRecords` + `CommitMarkedOffsets`, DB dedup, and idempotent handlers.
 
 In our teaching code, auto-commit is left enabled **on purpose** - so there is something to discuss and something to fix later. Right now it behaves like this:
 

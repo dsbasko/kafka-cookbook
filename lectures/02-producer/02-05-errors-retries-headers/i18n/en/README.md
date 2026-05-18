@@ -32,7 +32,7 @@ The client sees the code, reads the `Retriable` flag, and decides: either put th
 
 ## What franz-go does with a retriable error
 
-When a Produce request comes back with a retriable error, the client does **not** immediately return `ProduceSync(...) → err`. It holds the record in an internal queue and retries on its own. The retry count is capped by `RecordRetries` (default `math.MaxInt32`, meaning "until time runs out"). The time budget is capped by `RecordDeliveryTimeout`.
+When a Produce request comes back with a retriable error, the client does **not** immediately return `ProduceSync(...) → err`. It holds the record in an internal queue and retries on its own. The retry count is capped by `RecordRetries` (default `math.MaxInt64`, meaning "until time runs out"). The time budget is capped by `RecordDeliveryTimeout`.
 
 `RecordDeliveryTimeout` is the total budget for delivering **one** record. It covers everything: the first attempt, the wait before a retry, the second attempt, metadata refreshes — all of it. By default it is unset (= ∞), and then the effective limit is only `RequestTimeoutOverhead` plus `RecordRetries`. In practice, set an explicit ceiling — 30 seconds, a minute — otherwise a retrying record can sit in the buffer for several minutes, consuming `MaxBufferedRecords`.
 
@@ -174,7 +174,7 @@ Two things are visible. Headers are `[]kgo.RecordHeader`, the same type as in th
 - Headers are a separate record slot. Put everything infrastructural there: tracing context, `correlation-id`, `message-type`, `source-service`, `idempotency-key`, and so on. The broker does not touch them.
 - The payload carries only the event's business fields — those described in its schema. Headers are for everything else that the transport and infrastructure need.
 
-Module 03 switches to the consumer side: consumer groups, rebalancing, processing guarantees. Headers will be needed in every other lecture there — especially in [Error handling](../../../../03-consumer/03-04-error-handling/i18n/ru/README.md), where DLQ messages fundamentally require `error.message`, `error.class`, and `original.offset` in headers, not in the payload.
+Module 03 switches to the consumer side: consumer groups, rebalancing, processing guarantees. Headers will be needed in every other lecture there — especially in [Error handling](../../../../03-consumer/03-04-error-handling/i18n/en/README.md), where DLQ messages fundamentally require `error.message`, `error.class`, and `original.offset` in headers, not in the payload.
 
 ## Running
 

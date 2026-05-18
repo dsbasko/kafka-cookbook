@@ -90,7 +90,7 @@ if !o.idempotent {
 }
 ```
 
-In the default branch (`-idempotent=true`) nothing extra is added — franz-go enables idempotency with `acks=all` on its own. In the alternative branch you must explicitly disable idempotency and explicitly set `acks=all` (otherwise the client complains about incompatible defaults). I keep `acks=all` the same in both modes — to rule out that differences in the log came from different durability settings rather than idempotency.
+In the default branch (`-idempotent=true`) nothing extra is added — franz-go enables idempotency with `acks=all` on its own. In the alternative branch we explicitly disable idempotency and keep `acks=all` (the franz-go default is already `AllISRAcks`; I set the option explicitly for symmetry and readability). I keep `acks=all` the same in both modes — to rule out that differences in the log came from different durability settings rather than idempotency.
 
 The write loop — a bare `ProduceSync` per record:
 

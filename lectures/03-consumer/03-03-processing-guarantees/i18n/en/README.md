@@ -9,7 +9,7 @@ Literature on processing guarantees traditionally breaks the world into categori
 Breaking it down by layer:
 
 1. **Byte delivery from broker to your process.** Here at-least-once is the only realistic mode in production. Network hiccupped, request went out, ack was lost — there will be a retry. Bare Kafka and any client on top of it.
-2. **Shifting the committed offset in `__consumer_offsets`.** Here you can play with at-most/at-least depending on when you commit — before or after processing (see the [Offset commits](../../../03-02-offset-commits/i18n/ru/README.md) lecture). No third option at this layer.
+2. **Shifting the committed offset in `__consumer_offsets`.** Here you can play with at-most/at-least depending on when you commit — before or after processing (see the [Offset commits](../../../03-02-offset-commits/i18n/en/README.md) lecture). No third option at this layer.
 3. **The processing effect in your application or external system.** Here you can achieve exactly-once — through a property of the handler itself, not through commit.
 
 The third layer is the subject of this lecture. If the handler is idempotent, calling it again with the same input changes nothing — and it no longer matters that Kafka delivered the record twice. At the system level the result is the same.
@@ -131,7 +131,7 @@ Second — the table grows. If topic retention is 7 days and the dedup table is 
 
 Third — this only works while DB and Kafka run in parallel. If the DB went down after the insert but before the commit — Kafka didn't advance the offset, we restarted, DB came back up, the repeated insert got `ON CONFLICT` — all good. But if the DB lost data (restored from a backup to an earlier point in time) — our dedup is broken, because the duplicate is no longer recognized as a duplicate. That is a catastrophic scenario; it needs a separate recovery plan.
 
-Fourth — atomicity on the DB side. Here we have one insert, and Postgres commits it atomically. If business logic is more complex (multiple UPDATEs plus an external API call) — you either wrap everything in one transaction, or move it outside via transactional outbox ([Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/ru/README.md)). If neither fits — accept that some operations may be not-exactly-once, and compensate after the fact.
+Fourth — atomicity on the DB side. Here we have one insert, and Postgres commits it atomically. If business logic is more complex (multiple UPDATEs plus an external API call) — you either wrap everything in one transaction, or move it outside via transactional outbox ([Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/en/README.md)). If neither fits — accept that some operations may be not-exactly-once, and compensate after the fact.
 
 ## Where this approach won't fit
 
@@ -139,7 +139,7 @@ If processing has an **external side effect that is not idempotent** — for exa
 
 The solutions are known. Either the downstream supports idempotency-key natively (payment gateways usually do). Or you build an outbox: insert into DB and outbox table in one transaction, a separate publisher sends the outbox to Kafka, an idempotent consumer pulls it to the outside. Then "sent email" = "updated outbox.sent_at = NOW()", and the actual send went through an idempotent downstream.
 
-That is already [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/ru/README.md) and [External system delivery](../../../../04-reliability/04-05-external-delivery/i18n/ru/README.md). In this lecture everything is simpler: one insert into one table. Everything else lives in the same DB; dedup closes the question.
+That is already [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/en/README.md) and [External system delivery](../../../../04-reliability/04-05-external-delivery/i18n/en/README.md). In this lecture everything is simpler: one insert into one table. Everything else lives in the same DB; dedup closes the question.
 
 ## What else to try
 
@@ -151,6 +151,6 @@ That is already [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern
 
 ## Next
 
-This approach is the foundation for everything in module 04. Transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md)) give exactly-once at the Kafka-to-Kafka pipeline level. Outbox ([Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/ru/README.md)) — exactly-once at the DB-Kafka boundary. External delivery ([External system delivery](../../../../04-reliability/04-05-external-delivery/i18n/ru/README.md)) — what to do when the downstream is not idempotent. The idea is the same everywhere: **find a way to recognize a repeat and make it a no-op**. Only the tool changes.
+This approach is the foundation for everything in module 04. Transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md)) give exactly-once at the Kafka-to-Kafka pipeline level. Outbox ([Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/en/README.md)) — exactly-once at the DB-Kafka boundary. External delivery ([External system delivery](../../../../04-reliability/04-05-external-delivery/i18n/en/README.md)) — what to do when the downstream is not idempotent. The idea is the same everywhere: **find a way to recognize a repeat and make it a no-op**. Only the tool changes.
 
-The next lecture ([Error handling](../../../03-04-error-handling/i18n/ru/README.md)) — on error handling: what to do when the handler finishes with an error. Skip, retry, retry-topic, DLQ. Idempotency stays in the background — it's needed everywhere there is a retry, and error handling has retries by definition.
+The next lecture ([Error handling](../../../03-04-error-handling/i18n/en/README.md)) — on error handling: what to do when the handler finishes with an error. Skip, retry, retry-topic, DLQ. Idempotency stays in the background — it's needed everywhere there is a retry, and error handling has retries by definition.

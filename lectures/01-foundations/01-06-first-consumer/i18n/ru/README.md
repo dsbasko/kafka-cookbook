@@ -130,7 +130,7 @@ for {
 `cmd/consumer/main.go` делает четыре вещи:
 
 1. Создаёт `kgo.Client` в режиме consumer-группы `brew.kitchen-service`, подписан на топик `brew.orders.v1`.
-2. На свежей группе (когда committed offset ещё нет) сбрасывается на earliest через `ConsumeResetOffset(...AtStart())`. Иначе бы те 10 `OrderPlaced`, которые `order-service` записал **до** старта консьюмера, не показались - дефолт franz-go и Kafka это latest.
+2. На свежей группе (когда committed offset ещё нет) явно сбрасывается на earliest через `ConsumeResetOffset(...AtStart())`. По умолчанию franz-go v1.21.0 уже выставляет `ConsumeResetOffset(NewOffset().AtStart())` (см. godoc), так что эта опция дублирует дефолт - но фиксирует поведение явно и развязывает с возможным изменением дефолта в будущих версиях. Kafka-брокер, в отличие от клиента, в `auto.offset.reset` по умолчанию ставит `latest` - но это уже неважно, потому что клиентский reset разрешается на стороне franz-go.
 3. В цикле читает `PollFetches` и печатает таблицу `member/partition/offset/key/value/broker-ts`. Корректно завершается по SIGINT.
 4. Печатает в stderr хуки `OnPartitionsAssigned` и `OnPartitionsRevoked` - видно, какие партиции достались этому процессу. Полезно при наблюдении ребаланса (см. ниже про `make run-2nd`).
 
@@ -150,12 +150,14 @@ opts := []kgo.Opt{
 }
 if o.fromStart {
     opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+} else {
+    opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()))
 }
 
 cl, err := kafka.NewClient(opts...)
 ```
 
-`ConsumeResetOffset(...AtStart())` это «при первом старте группы читай с earliest». На втором запуске уже есть committed offset в `__consumer_offsets`, и `ResetOffset` ни на что не влияет.
+`ConsumeResetOffset(...AtStart())` это «при первом старте группы читай с earliest»; `AtEnd()` это «читай только то, что придёт после старта». На втором запуске уже есть committed offset в `__consumer_offsets`, и `ResetOffset` ни на что не влияет - он отрабатывает только при первом подключении группы к партиции или при `OffsetOutOfRange`.
 
 Основной цикл это `PollFetches` плюс печать через `EachRecord`. По дороге проверяем ошибки: `context.Canceled` это SIGINT, всё остальное настоящий fail на fetch'е:
 
@@ -197,27 +199,27 @@ kitchen-service запущен: brew-topic="brew.orders.v1" group="brew.kitchen-
 [member=1] assigned: map[brew.orders.v1:[0 1 2]]
 
 MEMBER  PARTITION  OFFSET  KEY      VALUE                            BROKER-TS
-1       0          0       order-0  OrderPlaced order_id=order-0     16:55:01.234
+1       1          0       order-0  OrderPlaced order_id=order-0     16:55:01.234
+1       1          1       order-1  OrderPlaced order_id=order-1     16:55:01.241
+1       1          2       order-7  OrderPlaced order_id=order-7     16:55:01.277
+1       1          3       order-9  OrderPlaced order_id=order-9     16:55:01.289
+1       0          0       order-2  OrderPlaced order_id=order-2     16:55:01.247
 1       0          1       order-3  OrderPlaced order_id=order-3     16:55:01.253
 1       0          2       order-6  OrderPlaced order_id=order-6     16:55:01.271
-1       0          3       order-9  OrderPlaced order_id=order-9     16:55:01.289
-1       1          0       order-2  OrderPlaced order_id=order-2     16:55:01.247
-1       1          1       order-5  OrderPlaced order_id=order-5     16:55:01.265
-1       1          2       order-8  OrderPlaced order_id=order-8     16:55:01.283
-1       2          0       order-1  OrderPlaced order_id=order-1     16:55:01.241
-1       2          1       order-4  OrderPlaced order_id=order-4     16:55:01.259
-1       2          2       order-7  OrderPlaced order_id=order-7     16:55:01.277
+1       2          0       order-4  OrderPlaced order_id=order-4     16:55:01.259
+1       2          1       order-5  OrderPlaced order_id=order-5     16:55:01.265
+1       2          2       order-8  OrderPlaced order_id=order-8     16:55:01.283
 ```
 
 Несколько наблюдений по выводу.
 
 Записи внутри одной партиции идут в порядке offset'ов: 0, 1, 2, 3. Это **гарантия Kafka**, она держится всегда. А между партициями порядок не определён вообще: что-то из 0, что-то из 1, что-то из 2 - клиент вычитывает их параллельно, и сборка в общем потоке зависит от тайминга `PollFetches`. Если запустить второй раз, конкретный порядок строк может быть другим. Ordering-per-partition это единственная гарантия порядка, которую Kafka даёт. Глобального порядка по топику не бывает.
 
-Раскладка `(order-id → partition)` тут совпадает с той, что вернул `ProduceSync` в лекции 01-05: `order-0/3/6/9` в партиции 0, `order-2/5/8` в партиции 1, `order-1/4/7` в партиции 2. Это и есть детерминированный partitioner: `hash(order_id) mod 3` даёт одну и ту же партицию для одного и того же ключа. Кухня видит ровно ту же группировку, что положил `order-service`.
+Раскладка `(order-id → partition)` тут совпадает с той, что вернул `ProduceSync` в лекции 01-05: `order-0/1/7/9` в партиции 1, `order-2/3/6` в партиции 0, `order-4/5/8` в партиции 2. Это и есть детерминированный partitioner: дефолтный хеш franz-go это murmur2, и `murmur2(order_id) mod 3` даёт одну и ту же партицию для одного и того же ключа. Кухня видит ровно ту же группировку, что положил `order-service`.
 
 Member везде «1», потому что у нас один процесс. Все три партиции достались ему - `assigned` map это и показывает.
 
-Если запустить `make run` ещё раз с тем же group.id - таблица будет пустой. Committed offset уже стоит на 4/3/3 (по партициям), новых сообщений нет, консьюмер просто висит в `PollFetches` и ждёт. Это и есть «committed offset работает» - никакого бага здесь нет. Хочется перечитать всё с начала - есть `make run-fresh`, она дописывает к group.id случайный суффикс и получает свежую группу с пустыми offset'ами.
+Если запустить `make run` ещё раз с тем же group.id - таблица будет пустой. Committed offset уже стоит на 3/4/3 (по партициям 0/1/2), новых сообщений нет, консьюмер просто висит в `PollFetches` и ждёт. Это и есть «committed offset работает» - никакого бага здесь нет. Хочется перечитать всё с начала - есть `make run-fresh`, она дописывает к group.id случайный суффикс и получает свежую группу с пустыми offset'ами.
 
 ## Два инстанса в одной группе - наблюдаем rebalance
 

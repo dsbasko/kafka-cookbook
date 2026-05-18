@@ -75,6 +75,8 @@ func run(ctx context.Context, o runOpts) error {
 	}
 	if o.fromStart {
 		opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+	} else {
+		opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()))
 	}
 
 	cl, err := kafka.NewClient(opts...)

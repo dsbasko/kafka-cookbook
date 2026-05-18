@@ -130,7 +130,7 @@ Three details matter in this template. `defer cl.Close()` is mandatory; without 
 `cmd/consumer/main.go` does four things:
 
 1. Creates a `kgo.Client` in consumer-group mode `brew.kitchen-service`, subscribed to topic `brew.orders.v1`.
-2. On a fresh group (no committed offset yet) resets to earliest via `ConsumeResetOffset(...AtStart())`. Otherwise those 10 `OrderPlaced` records that `order-service` wrote **before** the consumer started would not show up - the franz-go and Kafka default is latest.
+2. On a fresh group (no committed offset yet) explicitly resets to earliest via `ConsumeResetOffset(...AtStart())`. franz-go v1.21.0 already defaults `ConsumeResetOffset` to `NewOffset().AtStart()` (see godoc), so the option duplicates the default - but it pins the behavior explicitly and decouples us from any future default change. The Kafka broker, by contrast, defaults `auto.offset.reset` to `latest` - but that is irrelevant here, because the client resolves the reset on franz-go's side.
 3. Loops on `PollFetches` and prints a `member/partition/offset/key/value/broker-ts` table. Shuts down cleanly on SIGINT.
 4. Prints `OnPartitionsAssigned` and `OnPartitionsRevoked` callbacks to stderr so it is visible which partitions this process owns. Useful when watching a rebalance (see `make run-2nd` below).
 
@@ -150,12 +150,14 @@ opts := []kgo.Opt{
 }
 if o.fromStart {
     opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+} else {
+    opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()))
 }
 
 cl, err := kafka.NewClient(opts...)
 ```
 
-`ConsumeResetOffset(...AtStart())` reads "on first group start, begin from earliest". On a second run the committed offset already lives in `__consumer_offsets` and `ResetOffset` has no effect.
+`ConsumeResetOffset(...AtStart())` reads "on first group start, begin from earliest"; `AtEnd()` reads "only what arrives after we start". On a second run the committed offset already lives in `__consumer_offsets` and `ResetOffset` has no effect - it kicks in only when the group first attaches to a partition or on `OffsetOutOfRange`.
 
 The main loop is `PollFetches` plus printing through `EachRecord`. Along the way we check errors: `context.Canceled` is SIGINT, everything else is a real fetch failure:
 
@@ -197,27 +199,27 @@ kitchen-service запущен: brew-topic="brew.orders.v1" group="brew.kitchen-
 [member=1] assigned: map[brew.orders.v1:[0 1 2]]
 
 MEMBER  PARTITION  OFFSET  KEY      VALUE                            BROKER-TS
-1       0          0       order-0  OrderPlaced order_id=order-0     16:55:01.234
+1       1          0       order-0  OrderPlaced order_id=order-0     16:55:01.234
+1       1          1       order-1  OrderPlaced order_id=order-1     16:55:01.241
+1       1          2       order-7  OrderPlaced order_id=order-7     16:55:01.277
+1       1          3       order-9  OrderPlaced order_id=order-9     16:55:01.289
+1       0          0       order-2  OrderPlaced order_id=order-2     16:55:01.247
 1       0          1       order-3  OrderPlaced order_id=order-3     16:55:01.253
 1       0          2       order-6  OrderPlaced order_id=order-6     16:55:01.271
-1       0          3       order-9  OrderPlaced order_id=order-9     16:55:01.289
-1       1          0       order-2  OrderPlaced order_id=order-2     16:55:01.247
-1       1          1       order-5  OrderPlaced order_id=order-5     16:55:01.265
-1       1          2       order-8  OrderPlaced order_id=order-8     16:55:01.283
-1       2          0       order-1  OrderPlaced order_id=order-1     16:55:01.241
-1       2          1       order-4  OrderPlaced order_id=order-4     16:55:01.259
-1       2          2       order-7  OrderPlaced order_id=order-7     16:55:01.277
+1       2          0       order-4  OrderPlaced order_id=order-4     16:55:01.259
+1       2          1       order-5  OrderPlaced order_id=order-5     16:55:01.265
+1       2          2       order-8  OrderPlaced order_id=order-8     16:55:01.283
 ```
 
 A few notes on this output. (The Russian phrases inside log messages are intentional - the Go program prints them as-is; the rest of this README explains them.)
 
 Records inside a single partition follow offset order: 0, 1, 2, 3. This is a **Kafka guarantee** and it always holds. Between partitions, order is completely undefined - some from 0, some from 1, some from 2 - the client reads them in parallel, and the assembly in the combined stream depends on `PollFetches` timing. Run the consumer a second time and the specific row order may shift. Per-partition ordering is the only ordering guarantee Kafka provides. There is no global order across a topic.
 
-The `(order-id → partition)` mapping here matches exactly what `ProduceSync` returned back in 01-05: `order-0/3/6/9` in partition 0, `order-2/5/8` in partition 1, `order-1/4/7` in partition 2. That is the deterministic partitioner at work: `hash(order_id) mod 3` yields the same partition for the same key. The kitchen sees exactly the grouping the order service produced.
+The `(order-id → partition)` mapping here matches exactly what `ProduceSync` returned back in 01-05: `order-0/1/7/9` in partition 1, `order-2/3/6` in partition 0, `order-4/5/8` in partition 2. That is the deterministic partitioner at work: franz-go's default hash is murmur2, and `murmur2(order_id) mod 3` yields the same partition for the same key. The kitchen sees exactly the grouping the order service produced.
 
 Member is "1" everywhere because we have one process. All three partitions went to it - the `assigned` map shows it directly.
 
-Run `make run` again with the same group.id and the table will be empty. The committed offset is already at 4/3/3 (per partition), there are no new messages, and the consumer just sits in `PollFetches` waiting. This is "committed offset working" as intended; no bug to chase. To re-read everything from scratch use `make run-fresh` - it appends a random suffix to the group.id and gives you a fresh group with empty offsets.
+Run `make run` again with the same group.id and the table will be empty. The committed offset is already at 3/4/3 (partitions 0/1/2), there are no new messages, and the consumer just sits in `PollFetches` waiting. This is "committed offset working" as intended; no bug to chase. To re-read everything from scratch use `make run-fresh` - it appends a random suffix to the group.id and gives you a fresh group with empty offsets.
 
 ## Two instances in one group - watching a rebalance
 

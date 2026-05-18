@@ -1,6 +1,6 @@
 # 03-01 — Consumer Groups & Rebalance
 
-This lecture opens the consumer module. In the first lecture ([First consumer with franz-go](../../../../01-foundations/01-06-first-consumer/i18n/ru/README.md)) we ran a single consumer and read a topic in a loop — enough to understand how PollFetches works and how to shut down cleanly. Here we look at what happens when there are multiple consumers and Kafka has to divide partitions between them.
+This lecture opens the consumer module. In the first lecture ([First consumer with franz-go](../../../../01-foundations/01-06-first-consumer/i18n/en/README.md)) we ran a single consumer and read a topic in a loop — enough to understand how PollFetches works and how to shut down cleanly. Here we look at what happens when there are multiple consumers and Kafka has to divide partitions between them.
 
 A group is exactly that division mechanism.
 
@@ -70,17 +70,19 @@ You cannot mix eager and cooperative within one group. They are different SyncGr
 
 The coordinator needs to know that a member is still alive. To do this, the member sends a heartbeat every `HeartbeatInterval` (on the wire — `heartbeat.interval.ms`). franz-go does this automatically in the background, in a separate goroutine — the application does not need to call anything.
 
-If the coordinator has not received a heartbeat from a member for longer than `SessionTimeout` (`session.timeout.ms`), it declares the member dead and starts a rebalance without it. The default session.timeout is 45 seconds (Kafka 3.0+), heartbeat.interval is 3 seconds. So a member has to miss ~15 consecutive heartbeats before being evicted. This margin covers network blips and GC pauses — a short network hiccup should not trigger a rebalance.
+If the coordinator has not received a heartbeat from a member for longer than `SessionTimeout` (`session.timeout.ms`), it declares the member dead and starts a rebalance without it. franz-go v1.21.0 defaults: `SessionTimeout` = 45 seconds (Kafka 3.0+ standardised on this value after KIP-735), `HeartbeatInterval` = 3 seconds (`pkg/kgo/config.go:641-643`). A member has to miss ~15 consecutive heartbeats before being evicted. This margin covers network blips and GC pauses — a short network hiccup should not trigger a rebalance.
 
-The third timing is `MaxPollInterval` (`max.poll.interval.ms`). This is a different mechanism. The default is 5 minutes. It watches the interval between **two consecutive PollFetches calls**. If the application stalls inside processing one batch and does not return to PollFetches within 5 minutes — the coordinator considers it dead, even if heartbeats kept flying. The idea is that heartbeats come from a background goroutine and know nothing about actual processing; max.poll.interval is the only guard against the case "application is chewing one message for half an hour."
+The third timing is `RebalanceTimeout` (`rebalance.timeout.ms`). franz-go default is 60 seconds (`config.go:642`). This is the window in which every member must surrender partitions, commit offsets and rejoin after JoinGroup. If a member fails to rejoin within that time, the coordinator treats it as gone and continues the rebalance without it.
+
+The Java client has a separate knob `max.poll.interval.ms` (default 5 minutes) that also tracks the gap between `poll()` calls client-side and forces the consumer to voluntarily leave the group when exceeded. On the wire it travels in the same JoinGroupRequest field as `rebalance.timeout.ms`. franz-go does not do this client-side self-eviction: the heartbeat goroutine keeps signalling even if processing a single record takes half an hour. You only hit a problem if a rebalance happens during that long processing — the stuck handler will then fail to rejoin within `RebalanceTimeout`, and the broker will kick the member out.
 
 The three timers in plain terms:
 
-- heartbeat.interval — how often I signal that I am alive;
-- session.timeout — how long the broker waits for that signal;
-- max.poll.interval — how long the broker waits for me to request the next batch.
+- `HeartbeatInterval` — how often I signal that I am alive;
+- `SessionTimeout` — how long the broker waits for that signal;
+- `RebalanceTimeout` — how long the broker waits for me to finish my share of the rebalance and rejoin.
 
-If processing a single record can genuinely take 10 minutes — raise max.poll.interval. If you are worried that a zombie process will hang in the group and not release partitions — lower session.timeout. If you are worried about false positives on network blips — raise session.timeout (and pull max.poll.interval up with it so they do not collide).
+If you are worried that a zombie process will hang in the group and not release partitions — lower `SessionTimeout`. If you are worried about false positives on network blips — raise `SessionTimeout`. If your handler can genuinely hold a partition for minutes and you still want the rebalance to complete cleanly — raise `RebalanceTimeout` (franz-go-specific caveat: the client will not interrupt the handler, but the commit inside `OnPartitionsRevoked` still has to fit inside this window).
 
 ## What the code shows
 
@@ -116,7 +118,7 @@ There are three hooks:
 
 1. `OnPartitionsAssigned` — the coordinator has issued you a new partition set.
 2. `OnPartitionsRevoked` — the coordinator is orderly revoking some (or all) of your partitions as part of a planned rebalance. Until the rebalance completes you are still a group member and can commit offsets — this is a safe place for a final commit.
-3. `OnPartitionsLost` — differs from `Revoked` in exactly one way: it fires when the coordinator has already declared you dead (missed session timeout, for example). Partitions are not "revoked by plan" — they are lost. Committing offsets here is not possible; the coordinator will reject it.
+3. `OnPartitionsLost` — differs from `Revoked` in exactly one way: it fires on "fatal" group errors (`IllegalGeneration`, `UnknownMemberID`, authentication failure, an expired session timeout). The partitions are already gone, you no longer own them. A commit here will almost certainly be rejected by the coordinator — that is the practical difference from `OnPartitionsRevoked`, where committing is still possible and recommended.
 
 The strategy is selected with the `-strategy` flag:
 
@@ -163,11 +165,11 @@ pgrep -f 'loud-member.*MEMBER_ID=2' | xargs kill -9
 - Rebalance is the redistribution of partitions. Triggers: member join/leave, topic expansion, session timeout, admin manual trigger.
 - There are several strategies; set `cooperative-sticky` by default. Sticky without cooperative is an eager protocol with a stop-the-world rebalance.
 - All members in one group must advertise a compatible rebalance protocol. Cooperative + eager → the group collapses to eager.
-- Rebalance timings are three independent knobs: `heartbeat.interval` ("how often I signal"), `session.timeout` ("how long the broker waits for the signal"), `max.poll.interval` ("how long the broker waits for the next PollFetches call"). Heartbeat and session are about "is it alive at all." Max.poll.interval is about "is it stuck in processing."
+- Rebalance timings in franz-go are three independent knobs: `HeartbeatInterval` (default 3 s, "how often I signal"), `SessionTimeout` (45 s, "how long the broker waits for the signal"), `RebalanceTimeout` (60 s, "how long the broker waits for me to finish my share of the rebalance"). The Java-client `max.poll.interval.ms` with client-side self-eviction does not exist in franz-go — slow processing will not auto-evict you; the issue only surfaces if a rebalance overlaps with the slow handler.
 - InstanceID (`group.instance.id`) provides static identification: on restart, partitions return to the same logical member without a rebalance.
 - OnPartitionsLost is a separate hook for "evicted by the coordinator on timeout." Committing offsets inside it is not allowed; inside OnPartitionsRevoked it is.
 
-The next lecture ([Offset commits](../../../03-02-offset-commits/i18n/ru/README.md)) goes down to the offset commit level: auto-commit and its duplicates on restart, manual sync/async, MarkCommitRecords + CommitMarkedOffsets, and a few other knobs. Here we only touched offsets in passing — time to cover them properly.
+The next lecture ([Offset commits](../../../03-02-offset-commits/i18n/en/README.md)) goes down to the offset commit level: auto-commit and its duplicates on restart, manual sync/async, MarkCommitRecords + CommitMarkedOffsets, and a few other knobs. Here we only touched offsets in passing — time to cover them properly.
 
 ## Running
 

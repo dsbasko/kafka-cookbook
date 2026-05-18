@@ -33,10 +33,10 @@ The last point is the main stumbling block for newcomers. Brew wanted "order all
 
 When a producer writes, it sends `(topic, key, value)`. The client then decides which partition to assign it to:
 
-- if `key` is empty: round-robin or sticky partitioner (the default in franz-go is sticky: it accumulates a batch and sends it to one partition for efficiency);
+- if `key` is empty: sticky-style. The default in franz-go is `kgo.UniformBytesPartitioner` (KIP-794, shipped in the Java client from 3.3): it accumulates ~64 KiB into one partition, then rolls. The explicit alternative is `kgo.RoundRobinPartitioner`;
 - if `key` is present: `partition = hash(key) mod N`, where N is the number of partitions.
 
-The default hash is murmur2 (same as the Java client, so Go and Java write to the same partition for the same key). You can set a custom one via `kgo.Partitioner`. This is covered in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md); for now the key fact is: the key decides the partition via simple arithmetic.
+The default hash is murmur2 (same as the Java client, so Go and Java write to the same partition for the same key). To change the strategy use the `kgo.RecordPartitioner` option - pass `kgo.RoundRobinPartitioner`, `kgo.StickyKeyPartitioner` or your own implementation of the `kgo.Partitioner` interface. More in [Keys and partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md); for now the key fact is: the key decides the partition via simple arithmetic.
 
 This formula leads to the property interviewers love. Messages with the same key land in the same partition. Guaranteed. And therefore they are read in order. That's the "one-key, one-partition, one-order" guarantee.
 

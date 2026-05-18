@@ -10,12 +10,12 @@ The core misconception: people think a batch in Kafka is when you assemble an ar
 
 What "periodically" means. In franz-go (and in the standard Java client) this fires on one of two events:
 
-1. `ProducerBatchMaxBytes` has accumulated (1 MB by default) — send immediately, no point holding it.
-2. `ProducerLinger` fires — a timer after which everything queued is sent. Default is 0, meaning "send as soon as you can."
+1. `ProducerBatchMaxBytes` has accumulated (franz-go v1.21.0 default is 1,000,012 bytes, mirroring Kafka's `max.message.bytes` default) — send immediately, no point holding it.
+2. `ProducerLinger` fires — a timer after which everything queued is sent. franz-go v1.21.0 default is 10 ms (switched in v1.20.0; before that it was 0; the Java client still defaults to 0).
 
-A default linger=0 does not mean "no batching." When several goroutines write to the same producer simultaneously, there is a tiny gap between "put in the queue" and "producer is about to send the request" — and a few more messages land in that window. That produces a natural batch, with no delay on the application side. But if messages arrive infrequently, each one flies on its own.
+The 10 ms default is effectively a tiny built-in linger: even on a dense stream the client groups records that landed in the queue between "put in queue" and "producer is about to send the request" into one batch. Without an explicit `ProducerLinger(0)` batches are noticeably thicker than under "send immediately." On a sparse stream those 10 ms are barely visible in end-to-end latency, while compression actually has a decent batch to chew on.
 
-`ProducerLinger > 0` forces the producer to wait for the timer to expire, accumulating more. On a very high-rate stream the gain is almost nothing (the batch is already thick); on a slow stream the timer eats into latency. linger is therefore a trade-off between "send immediately" and "send efficiently."
+`ProducerLinger > 10ms` forces the producer to wait even longer, accumulating more. On a very high-rate stream the gain is almost nothing (the batch is already thick); on a slow stream the timer eats into latency. linger is therefore a trade-off between "send almost immediately" and "send efficiently."
 
 In our code the batch is assembled exactly like this:
 
@@ -37,8 +37,8 @@ The batch queue is per-partition. That matters. If you write to a topic with 24 
 
 Practical implications:
 
-- Thick batches are easier to get when many messages go to a single partition. On a sparse pattern — one or two records per second per key — the batch never fills up, and linger=0 sends each one nearly immediately.
-- With sticky partitioner (the franz-go default on empty keys) the producer "sticks" to one partition for a while — placing several records there in sequence. This is intentional, so batches occasionally fill up even without a key.
+- Thick batches are easier to get when many messages go to a single partition. On a sparse pattern — one or two records per second per key — the batch never fills up, and the default 10 ms linger sends each one nearly immediately.
+- The franz-go v1.21.0 default partitioner is `UniformBytesPartitioner(64 KiB, adaptive=true, keys=true, nil)` (KIP-794, Java default since 3.3). With an empty key it "sticks" to one partition until ~64 KiB has accumulated, then switches to the next one (sticky-bytes, not per-record round-robin). This is intentional, so batches occasionally fill up even without a key.
 - Increasing partition count without a corresponding increase in write rate makes batching **worse**, not better. Each partition gets less — batches get thinner.
 
 This applies to the "we're slow, let's add more partitions" conversation. First check whether batches are filling up at all — otherwise you'll only make things worse.
@@ -163,8 +163,8 @@ The boundary is somewhere around 200–300 bytes. Below that — either batch mu
 ## Takeaways
 
 - Batching in Kafka is on the producer side, per-partition. The producer assembles batches itself and sends them itself. Size is controlled by `ProducerBatchMaxBytes` and `ProducerLinger`.
-- linger=0 does not mean "no batching." It means "send when you can." Natural batches still form, just smaller ones.
-- linger > 0 is for **sparse streams** — to give batches time to fill up. On a dense stream it only increases tail latency; leave it at 0.
+- The franz-go v1.21.0 default is `ProducerLinger=10ms`. It's not "send immediately," but it's not aggressive lingering either: natural batches end up thicker than at 0, and end-to-end latency barely moves.
+- linger > 10ms is for **sparse streams** — to give batches time to fill up. On a dense stream it only increases tail latency; leave the default or set an explicit `ProducerLinger(0)`.
 - Compression works on the batch. On a thin batch it gives nothing; on a thick batch it gives everything.
 - Codecs. `lz4` is cheap on CPU and compresses moderately. `zstd` costs more but delivers 2–4× ratio on JSON. On random bytes no codec helps.
 - `MaxBufferedRecords` is the limit at which `Produce` blocks. The default of 10,000 needs to be raised under real load; otherwise backpressure hits the buffer before the broker.

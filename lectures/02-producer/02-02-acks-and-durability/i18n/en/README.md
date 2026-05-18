@@ -65,7 +65,7 @@ deliveryTimeout := kgo.RecordDeliveryTimeout(5 * time.Second)
 modes := []ackMode{
     {"acks=0", "0", []kgo.Opt{kgo.RequiredAcks(kgo.NoAck()), kgo.DisableIdempotentWrite(), deliveryTimeout}},
     {"acks=1", "1", []kgo.Opt{kgo.RequiredAcks(kgo.LeaderAck()), kgo.DisableIdempotentWrite(), deliveryTimeout}},
-    {"acks=all", "all", []kgo.Opt{deliveryTimeout}}, // дефолт franz-go: idempotent + AllISRAcks
+    {"acks=all", "all", []kgo.Opt{deliveryTimeout}}, // franz-go default: idempotent + AllISRAcks
 }
 ```
 
@@ -188,9 +188,9 @@ make run MESSAGES=2000 PAYLOAD=2048
 Broker failure demo. Run in two terminals or sequentially:
 
 ```sh
-make kill-broker      # остановили kafka-2, ISR падает до 2
-make run              # acks=all валится с timeout, acks=0/1 работают
-make restore-broker   # kafka-2 обратно, ISR восстанавливается
+make kill-broker      # stop kafka-2, ISR drops to 2
+make run              # acks=all fails with timeout, acks=0/1 keep working
+make restore-broker   # kafka-2 back up, ISR recovers
 ```
 
 Describe topics via `kafka-topics.sh --describe`:

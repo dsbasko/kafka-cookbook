@@ -220,9 +220,9 @@ This is normal franz-go practice: high-level `kadm` for the common case, low-lev
 
 ### The trap: MetadataControllerProxy ≠ RaftLeader
 
-If you accidentally print `md.Controller` as "the current controller", you'll get **the wrong one**. That's the id of a proxy broker through which controller-requests can be sent. It can switch to any other broker in the cluster once a second, because it's just a routing hint. The RaftLeader (the one that actually drives `__cluster_metadata`) only changes during a Raft re-election, which is rare.
+`md.Controller` is the broker's view of who the active controller is. In KRaft this value is refreshed through metadata updates pushed by the controller quorum: in a steady state it matches RaftLeader, but during a re-election it can briefly diverge (the broker hasn't received the new update yet). Building an "is the controller alive" alert on this field alone leaves a window where you'll see a stale id or `-1`.
 
-Our output shows both fields explicitly, so you can see the difference. In production, if you're monitoring "is the controller alive", look at RaftLeader through DescribeQuorum, not Controller through Metadata.
+RaftLeader from `DescribeQuorum` is asked directly of the controller quorum and reflects the current leader at request time. Our output shows both fields explicitly: on a steady cluster you'll see matching numbers, during a re-election you'll see them diverge. In production, monitor "is the controller alive" through RaftLeader via DescribeQuorum.
 
 After that the code just glues the two answers together. The broker whose id matches `LeaderID` gets the `broker + active controller` role in the table; the other voters get `broker + voter`.
 
@@ -246,9 +246,9 @@ RaftLeader:              3  (DescribeQuorum on __cluster_metadata; this is the a
 CurrentVoters:           [1 2 3]
 
 NODE  HOST       PORT   RACK  ROLE
-1     localhost  19092  -     broker + voter
-2     localhost  19093  -     broker + voter
-3     localhost  19094  -     broker + active controller
+1     127.0.0.1  19092  -     broker + voter
+2     127.0.0.1  19093  -     broker + voter
+3     127.0.0.1  19094  -     broker + active controller
 ```
 
 If you want to confirm the Go output isn't lying, compare against the CLI version:

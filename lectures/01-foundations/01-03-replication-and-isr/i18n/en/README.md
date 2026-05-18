@@ -70,7 +70,7 @@ Brew's sandbox has `KAFKA_MIN_INSYNC_REPLICAS=2`, which means:
 
 - ISR=3 - a write with `acks=all` is acknowledged normally; all good.
 - ISR=2 - also acknowledged; the cluster runs in "reduced" mode but writes continue.
-- ISR=1 - a write with `acks=all` fails with `NotEnoughReplicas`. The producer retries (in case ISR recovers), then gives up and returns an error to the app. Reads still work.
+- ISR=1 - a write with `acks=all` fails with `NotEnoughReplicas`. The producer retries (in case ISR recovers) - in franz-go, `RecordRetries` and `RecordDeliveryTimeout` are unlimited by default, so without an explicit cap retries climb indefinitely. Reads still work.
 - ISR=0 - the partition is fully offline: no writes, no reads. This is rare and usually means the whole cluster died; for Brew it's a "call the CTO" event.
 
 The combination `RF=3 + min.insync.replicas=2 + acks=all` is the standard durable configuration. You can lose one broker and keep writing. Lose two - you can no longer write with durability (only without it, via `acks=1` or `acks=0`, but that means potential data loss). The `acks` parameter itself is covered in detail in [First producer](../../../01-05-first-producer/i18n/en/README.md); for now it's enough to know `acks=all` means "wait until all ISR replicas store the message".
@@ -181,7 +181,7 @@ ISR={1}     min.insync.replicas=2     ->     write with acks=all -> NotEnoughRep
 
 What happens:
 
-- A write with `acks=all` retries `kgo.RequestRetries` times and eventually fails with `NOT_ENOUGH_REPLICAS`. `order-service` will start returning "couldn't accept your order, please retry" to customers (or push them into its retry buffer - depends on the handling).
+- A write with `acks=all` hits `NOT_ENOUGH_REPLICAS`. In franz-go this is a retryable error, and by default `kgo.RecordRetries` and `kgo.RecordDeliveryTimeout` are both unlimited - the producer will keep retrying until ISR recovers, and `order-service` will hang on the send call. To get a "couldn't accept your order, please retry" response with a predictable timeout, set an explicit cap or deadline (e.g. `kgo.RecordDeliveryTimeout(5*time.Second)` in prod). `kgo.RequestRetries` does not help here - its godoc explicitly notes that it does not apply to produce requests.
 - A write with `acks=1` still works, but durability is lost if the last leader dies.
 - A write with `acks=0` flies one-way without acknowledgement - the producer never learns about lost messages; for the payments topic that's unacceptable.
 - Reads work, the leader is alive. `kitchen-service` can read everything committed earlier, and nothing breaks.

@@ -155,7 +155,7 @@ Sync-commit on every batch — the default choice when processing runs in even m
 
 `AutoCommitMarks` + mark on each record + explicit flush between batches — the choice when every extra sync-commit shows up in throughput (small batches, very high rate, or business logic is fast and any loop blocking is expensive). The duplicate window is `AutoCommitInterval` — tune it explicitly to match your risk profile.
 
-If you need zero duplicates — a commit strategy alone won't get you there. That calls for exactly-once via transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md)) or an idempotent handler ([Processing guarantees](../../../03-03-processing-guarantees/i18n/ru/README.md) — the next lesson). A bare offset commit on the consumer side never gives exactly-once, no matter how you configure it.
+If you need zero duplicates — a commit strategy alone won't get you there. That calls for exactly-once via transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md)) or an idempotent handler ([Processing guarantees](../../../03-03-processing-guarantees/i18n/en/README.md) — the next lesson). A bare offset commit on the consumer side never gives exactly-once, no matter how you configure it.
 
 ## What to try hands-on
 
@@ -167,4 +167,4 @@ If you need zero duplicates — a commit strategy alone won't get you there. Tha
 
 ## Next
 
-This lesson covered the mechanics of commits. The next one ([Processing guarantees](../../../03-03-processing-guarantees/i18n/ru/README.md)) covers why a commit strategy alone can't give you exactly-once, and why the handler needs idempotency plus a dedup table. There — Postgres, `INSERT ... ON CONFLICT DO NOTHING`, and `kill -9` in the middle of processing no longer produces duplicates in the database — because the handler is protected, not the consumer.
+This lesson covered the mechanics of commits. The next one ([Processing guarantees](../../../03-03-processing-guarantees/i18n/en/README.md)) covers why a commit strategy alone can't give you exactly-once, and why the handler needs idempotency plus a dedup table. There — Postgres, `INSERT ... ON CONFLICT DO NOTHING`, and `kill -9` in the middle of processing no longer produces duplicates in the database — because the handler is protected, not the consumer.

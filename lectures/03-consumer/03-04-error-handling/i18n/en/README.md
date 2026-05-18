@@ -10,7 +10,7 @@ There's no single right answer — pick a strategy for the error class.
 
 1. **Skip** — log the error or record a metric, skip the message, commit the offset. Done, move on. The message is lost for business logic, but the pipeline keeps running. Suitable for "non-critical, happens" — button clicks, low-priority analytics tracking.
 2. **Retry in-place** — try the same record again right there, in the same worker loop, with backoff. One, two, three times. If it succeeds — commit and move on. If it burns out — fall through to one of the strategies below. Suitable for short failures: TCP blink, momentary rate-limit.
-3. **Retry-topic** — send the message to a separate topic `*-retry-30s`, whose consumer waits until timestamp+30s, then processes. If that fails — next retry topic with a larger window (`*-retry-5m`, `*-retry-1h`). This keeps the main consumer fast while routing broken records to separate "shelves" with increasing delays. That's [Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/ru/README.md) territory — here we only show the idea.
+3. **Retry-topic** — send the message to a separate topic `*-retry-30s`, whose consumer waits until timestamp+30s, then processes. If that fails — next retry topic with a larger window (`*-retry-5m`, `*-retry-1h`). This keeps the main consumer fast while routing broken records to separate "shelves" with increasing delays. That's [Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/en/README.md) territory — here we only show the idea.
 4. **DLQ** — dead-letter queue. A separate topic `*-dlq` that receives the message along with diagnostics (what failed, at which offset, how many attempts). From there — separate handling: alert, incident review, replay.
 
 In practice these strategies are usually combined. Transient error — retry in-place; didn't help — retry-topic with a delay; still failing after several runs — DLQ. "Keep retrying forever" doesn't exist: if processing hasn't succeeded after a reasonable number of attempts, the problem is either in the data or the downstream, and sitting in the poll loop is pointless.
@@ -123,11 +123,11 @@ These headers are the only bridge from the error to the person who will later tr
 
 ## Partition pause / resume — a separate tool
 
-Sometimes in-place retry doesn't fit and retry-topic seems like overkill. For example, a downstream API is down for five minutes. If the retry loop with exponential backoff runs longer than `max.poll.interval.ms` (default 5 minutes), the consumer drops out of the group — its partitions migrate to another member, which picks up the work and also fails. Ping-pong at the group level. Bad.
+Sometimes in-place retry doesn't fit and retry-topic seems like overkill. For example, a downstream API is down for five minutes. A long retry loop with exponential backoff won't kick the consumer out of the group on its own: franz-go heartbeats independently from processing, so the coordinator considers the client alive as long as its network heartbeat loop is healthy. The problem hits during a rebalance (new member joined, leader changed, broker went down). If at that moment the handler is stuck in backoff, it only has `RebalanceTimeout` (`rebalance.timeout.ms`, default 60 seconds in franz-go v1.21.0) to wind down the work, commit the offset, and rejoin. If it doesn't make it — the coordinator kicks the client, the partition migrates to another member, which picks up the same work and also fails. Ping-pong at the group level. Bad.
 
 `franz-go` has `cl.PauseFetchPartitions` and `cl.ResumeFetchPartitions`. This is a different mechanism: the partition stays **assigned** to the consumer (heartbeats keep going, the group considers it alive), but `PollFetches` stops returning new records from that partition. You can pause the partition, run an HTTP health check for downstream in the background, and resume when it's back up.
 
-This lesson's code doesn't use it for simplicity, but you should know it exists. We'll come back to pause/resume in [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/ru/README.md), where a circuit breaker maps naturally onto this pair of calls: CB transitions to open → pause partitions → CB returns to half-open → resume.
+This lesson's code doesn't use it for simplicity, but you should know it exists. We'll come back to pause/resume in [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/en/README.md), where a circuit breaker maps naturally onto this pair of calls: CB transitions to open → pause partitions → CB returns to half-open → resume.
 
 ## Duplicates in DLQ are normal
 
@@ -141,7 +141,7 @@ CommitRecords         ✗  ← committed offset didn't advance
 
 On restart the main topic delivers the same record again, it takes the same path and lands in DLQ a second time. DLQ has no duplicate protection — that's fine, but the DLQ handler must account for it. Either dedup by `(original.topic, original.partition, original.offset)` (which we put in headers), or simply accept that DLQ incidents sometimes come as duplicates.
 
-This is solved by the same transactional outbox or Kafka transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md)) — but only if DLQ production and the main consumer commit go through a single Kafka transaction. That's more complex, and not every case warrants those guarantees.
+This is solved by the same transactional outbox or Kafka transactions ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md)) — but only if DLQ production and the main consumer commit go through a single Kafka transaction. That's more complex, and not every case warrants those guarantees.
 
 ## Tradeoffs
 
@@ -151,7 +151,7 @@ In-place retry **blocks the poll loop**. While backoff is spinning on one record
 
 DLQ **hides errors**. If there's no alert on DLQ and nobody checks it, after a week 50,000 records are sitting there and nobody knows. DLQ without operational tooling is "lost and forgotten." An alert on DLQ topic lag growth is mandatory.
 
-Permanent classification **can be wrong**. If the processor was too quick to mark something as permanent and sent it to DLQ — restoration is manual: a replay CLI reads DLQ and resends to the main topic ([Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/ru/README.md)). So permanent = "I'm sure a retry won't help", not "I'm tired of retrying".
+Permanent classification **can be wrong**. If the processor was too quick to mark something as permanent and sent it to DLQ — restoration is manual: a replay CLI reads DLQ and resends to the main topic ([Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/en/README.md)). So permanent = "I'm sure a retry won't help", not "I'm tired of retrying".
 
 DLQ headers are **not a default contract**. Different teams have different naming conventions. Here we use `error.class` / `error.message` / `original.*` / `retry.count` / `dlq.timestamp`. Confluent's connector framework uses `__error.class.name` and company. With multiple teams this needs to be agreed upfront, otherwise one team writes and another reads — and finds nothing.
 
@@ -199,13 +199,13 @@ make clean                 # delete committed offsets and both topics
 - set `TRANSIENT_PCT=80` — most records will spin through retry but still "heal" after 2 attempts (hardcoded in the mock, see constant `transientFails`); result — 80% OK with retry, 20% in DLQ;
 - set `MAX_RETRIES=1` with the same `TRANSIENT_PCT=80` — most transient records don't get the chance to "heal" in one attempt and land in DLQ as exhausted; headers will show `error.class=transient`, `error.message: exhausted retries: ...`;
 - set `BASE_BACKOFF=2s` and watch processing slow down: one transient record's retry cycle now takes about 14 seconds (`2s + 4s + 8s`); you can see the poll loop blocking;
-- run the processor in two instances with the same `GROUP` — partitions split between them, retries run in parallel across partitions, but **within a partition** processing is still sequential (that's about concurrency — lesson [Concurrency and lag](../../../03-05-concurrency-and-lag/i18n/ru/README.md));
+- run the processor in two instances with the same `GROUP` — partitions split between them, retries run in parallel across partitions, but **within a partition** processing is still sequential (that's about concurrency — lesson [Concurrency and lag](../../../03-05-concurrency-and-lag/i18n/en/README.md));
 - run `make seed PERMANENT_PCT=100` — all records go to DLQ, the processor "works" stably (everything commits), but real business impact is zero; this is DLQ-flood — an alert should fire on DLQ lag growth.
 
 ## What's next
 
-Here we learned to separate transient from permanent and route them down different paths. But the retry loop is still inside the poll loop — long backoffs are impossible here. The [Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/ru/README.md) lesson untangles this through a chain of retry topics with increasing delays: `*-retry-30s` → `*-retry-5m` → `*-retry-1h` → `*-dlq`. Same principle, different dispatcher.
+Here we learned to separate transient from permanent and route them down different paths. But the retry loop is still inside the poll loop — long backoffs are impossible here. The [Retry and DLQ deep dive](../../../../04-reliability/04-04-retry-and-dlq/i18n/en/README.md) lesson untangles this through a chain of retry topics with increasing delays: `*-retry-30s` → `*-retry-5m` → `*-retry-1h` → `*-dlq`. Same principle, different dispatcher.
 
-[Concurrency and lag](../../../03-05-concurrency-and-lag/i18n/ru/README.md) — about concurrency. If retry on one record blocks all partitions — maybe process partitions in parallel? Or per-key worker pool? Covers lag, ordering, and tradeoffs between throughput and ordering guarantees.
+[Concurrency and lag](../../../03-05-concurrency-and-lag/i18n/en/README.md) — about concurrency. If retry on one record blocks all partitions — maybe process partitions in parallel? Or per-key worker pool? Covers lag, ordering, and tradeoffs between throughput and ordering guarantees.
 
-And in [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/ru/README.md) `PauseFetchPartitions` will appear. Here we only mentioned it; there you'll see a full circuit breaker driving that switch.
+And in [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/en/README.md) `PauseFetchPartitions` will appear. Here we only mentioned it; there you'll see a full circuit breaker driving that switch.

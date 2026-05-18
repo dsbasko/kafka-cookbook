@@ -123,34 +123,34 @@ What you will see in the output:
 
 распределение по партициям:
 PARTITION  COUNT
-0          400
+0          100
 1          300
-2          300
+2          600
 
 в какую партицию ложился каждый ключ:
 KEY     PARTITION  COUNT  NOTE
-user-0  2          100    one-key-one-partition ✓
-user-1  0          100    one-key-one-partition ✓
-user-2  1          100    one-key-one-partition ✓
-user-3  0          100    one-key-one-partition ✓
-user-4  2          100    one-key-one-partition ✓
+user-0  1          100    one-key-one-partition ✓
+user-1  2          100    one-key-one-partition ✓
+user-2  2          100    one-key-one-partition ✓
+user-3  2          100    one-key-one-partition ✓
+user-4  1          100    one-key-one-partition ✓
 user-5  1          100    one-key-one-partition ✓
-user-6  0          100    one-key-one-partition ✓
+user-6  2          100    one-key-one-partition ✓
 user-7  2          100    one-key-one-partition ✓
-user-8  1          100    one-key-one-partition ✓
-user-9  0          100    one-key-one-partition ✓
+user-8  0          100    one-key-one-partition ✓
+user-9  2          100    one-key-one-partition ✓
 
 сверка с end offsets из лога:
 PARTITION  LATEST
-0          400
+0          100
 1          300
-2          300
+2          600
 TOTAL      1000
 ```
 
-What matters. First, each key maps to exactly one partition — `one-key-one-partition ✓` appears for all. That is the default partitioner's guarantee. Second, the mapping between keys is deterministic: `user-0` always goes to partition 2 (on a 3-partition topic with murmur2), `user-1` always to 0, and so on. On 4 partitions the mapping will be different — and stable at that value. On 6 partitions — different again. Change N — everything changes.
+What matters. First, each key maps to exactly one partition — `one-key-one-partition ✓` appears for all. That is the default partitioner's guarantee. Second, the mapping between keys is deterministic: `user-8` always goes to partition 0 (on a 3-partition topic with murmur2), `user-0`, `user-4`, `user-5` always go to partition 1, the other six end up in partition 2. On 4 partitions the mapping will be different — and stable at that value. On 6 partitions — different again. Change N — everything changes.
 
-Third, the partition split came out 400/300/300 — not perfectly even. That is normal with 10 unique keys: 10 is too few for an even hash across 3 partitions. With 1000 unique keys it would be noticeably more balanced.
+Third, the partition split came out 100/300/600 — a sharp skew. That is normal with 10 unique keys: 10 is too few for an even murmur2 hash across 3 partitions, one key landed alone in P0 while six clumped into P2. With 1000 unique keys it would be noticeably more balanced.
 
 ### custom-partitioner
 
@@ -207,22 +207,22 @@ After 1000 records the program checks three invariants and prints them explicitl
 проверки:
   ✓ все премиум-записи лежат в партиции 0
   ✓ regular-записи не зашли в премиум-партицию 0
-  ✓ round-robin сбалансирован: P1=349, P2=350 (skew=1 ≤ 35)
+  ✓ round-robin сбалансирован: P1=343, P2=342 (skew=1 ≤ 34)
 ```
 
-The tolerance for round-robin is 5% of total. Here the difference is 1 record out of 699 — excellent.
+The tolerance for round-robin is 5% of total. Here the difference is 1 record out of 685 — excellent.
 
 The partition table in the output is equally clear:
 
 ```
 распределение по партициям:
 PARTITION  TOTAL  PREMIUM  REGULAR  NOTE
-0          301    301      0        premium-only ожидаем
-1          349    0        349      round-robin для regular
-2          350    0        350      round-robin для regular
+0          315    315      0        premium-only ожидаем
+1          343    0        343      round-robin для regular
+2          342    0        342      round-robin для regular
 ```
 
-The numbers under `--premium-pct=30` hover around 300/350/350. With other values of `--premium-pct` the distribution will differ.
+The numbers under `--premium-pct=30` are deterministic (PCG with a stable seed) and break down as 315/343/342. With other values of `--premium-pct` the distribution will differ.
 
 ## Key takeaways
 

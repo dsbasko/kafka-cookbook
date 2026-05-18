@@ -48,7 +48,7 @@ rec := &kgo.Record{
 - `Key` и `Value` это `[]byte`. Сериализация (JSON / Protobuf / Avro) - твоя ответственность. Брокер данные не парсит и тип не проверяет: для него это просто байты с длиной.
 - `Topic` обязателен. `Partition` обычно нет - partitioner сам выберет, ориентируясь на ключ (про это [Ключи и партиционирование](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md)).
 - `Headers` это `[]byte`-пары рядом с payload'ом. Туда складывают `trace_id`, `message_type`, `source_service` - всё, что удобно прочитать без десериализации тела. Развёрнуто разберём в [Ошибки, retries и headers](../../../../02-producer/02-05-errors-retries-headers/i18n/ru/README.md), здесь только упоминаем.
-- `Timestamp` можно задать руками или оставить нулевым. В нулевом случае брокер подставит свой wall-clock в момент записи. На итоговое значение в логе влияет ещё `message.timestamp.type` на уровне топика (`CreateTime` vs `LogAppendTime`); для `brew.orders.v1` стоит дефолт `CreateTime`, и Brew пишет timestamp на стороне продьюсера.
+- `Timestamp` можно задать руками или оставить нулевым. В нулевом случае franz-go при produce подставит `time.Now()` на стороне клиента (см. doc на `kgo.Record.Timestamp`). В лог попадёт именно это значение, если у топика `message.timestamp.type=CreateTime` (дефолт Kafka, и для `brew.orders.v1` ничего не меняли). При `LogAppendTime` брокер перезапишет timestamp своим wall-clock - в курсе этот режим не используется.
 
 После успешной записи брокер возвращает заполненные `Partition`, `Offset` и `Timestamp` - те, которые легли в лог. Это и есть «адрес» сообщения в Kafka. Дальше `OrderPlaced order-7` живёт по координате `brew.orders.v1` / partition=2 / offset=17 столько, сколько разрешает retention (для `brew.orders.v1` это 30 дней - смотри [Offsets и retention](../../../01-04-offsets-and-retention/i18n/ru/README.md)).
 
@@ -145,11 +145,11 @@ Latency выросла на ~10ms (это и есть `linger`), throughput x70-
 
 ## Ключ сообщения и связь с партицией
 
-Поле `Key` в `kgo.Record` это **руль к partitioner'у**, а не случайный идентификатор. По умолчанию (sticky-hash) partitioner считает `hash(key) mod N` и кладёт запись в выбранную партицию. Один и тот же ключ - всегда одна и та же партиция (пока число партиций не меняется), а значит порядок записей с этим ключом сохраняется.
+Поле `Key` в `kgo.Record` это **руль к partitioner'у**, а не случайный идентификатор. Дефолтный партиционер franz-go v1.21.0 это `UniformBytesPartitioner(64KiB, true, true, nil)` (KIP-794, в Java-клиенте дефолт с 3.3). Для записей с ключом он считает `hash(key) mod N` (хеш murmur2, как в Java-клиенте) и кладёт запись в выбранную партицию. Один и тот же ключ - всегда одна и та же партиция (пока число партиций не меняется), а значит порядок записей с этим ключом сохраняется.
 
 Для `brew.orders.v1` это критично. Ключом стоит `order_id`: все события одного заказа (`OrderPlaced`, `PaymentReceived`, `OrderReady`, `OrderDelivered`) ложатся в одну партицию и читаются строго по порядку. Если бы ключом стоял `shop_id`, получили бы баланс по магазинам, но порядок внутри одного заказа потерялся бы между партициями. Полный разбор кандидатов и trade-off'ов был в [Топики и партиции](../../../01-02-topics-and-partitions/i18n/ru/README.md), детальнее в [Ключи и партиционирование](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md).
 
-Если `Key` пустой - partitioner работает в режиме round-robin: записи раскидываются по партициям равномерно, но порядок не гарантируется ни для какой подгруппы. Это нормально для метрик и логов, плохо для бизнес-событий.
+Если `Key` пустой - тот же `UniformBytesPartitioner` копит ~64 KiB в одну партицию, потом переключается на следующую (sticky-bytes, а не round-robin по каждой записи). Нагрузка между партициями ровная на длинной дистанции, но порядок не гарантируется ни для какой подгруппы. Это нормально для метрик и логов, плохо для бизнес-событий. Сменить стратегию можно опцией `kgo.RecordPartitioner` - туда передаётся `kgo.RoundRobinPartitioner`, `kgo.StickyKeyPartitioner` (старый дефолт до KIP-794) или собственная реализация интерфейса `kgo.Partitioner`.
 
 Headers и timestamp в учебной лекции упоминаем одной фразой и идём дальше: `Headers` это metadata-пары рядом с payload'ом (`trace_id`, `message_type`), `Timestamp` это либо что задал продьюсер, либо что подставил брокер. Развёрнутый разбор обоих - [Ошибки, retries и headers](../../../../02-producer/02-05-errors-retries-headers/i18n/ru/README.md).
 
@@ -210,29 +210,29 @@ brew-topic "brew.orders.v1" создан: partitions=3 rf=3
 
 пишем 10 OrderPlaced в топик "brew.orders.v1" через ProduceSync
 
-N  KEY      VALUE                              PARTITION  OFFSET  BROKER-TS
-0  order-0  OrderPlaced order_id=order-0        0          0       16:55:01.234
-1  order-1  OrderPlaced order_id=order-1        2          0       16:55:01.241
-2  order-2  OrderPlaced order_id=order-2        1          0       16:55:01.247
-3  order-3  OrderPlaced order_id=order-3        0          1       16:55:01.253
-4  order-4  OrderPlaced order_id=order-4        2          1       16:55:01.259
-5  order-5  OrderPlaced order_id=order-5        1          1       16:55:01.265
-6  order-6  OrderPlaced order_id=order-6        0          2       16:55:01.271
-7  order-7  OrderPlaced order_id=order-7        2          2       16:55:01.277
-8  order-8  OrderPlaced order_id=order-8        1          2       16:55:01.283
-9  order-9  OrderPlaced order_id=order-9        0          3       16:55:01.289
+N  KEY      VALUE                         PARTITION  OFFSET  BROKER-TS
+0  order-0  OrderPlaced order_id=order-0  1          0       16:55:01.234
+1  order-1  OrderPlaced order_id=order-1  1          1       16:55:01.241
+2  order-2  OrderPlaced order_id=order-2  0          0       16:55:01.247
+3  order-3  OrderPlaced order_id=order-3  0          1       16:55:01.253
+4  order-4  OrderPlaced order_id=order-4  2          0       16:55:01.259
+5  order-5  OrderPlaced order_id=order-5  2          1       16:55:01.265
+6  order-6  OrderPlaced order_id=order-6  0          2       16:55:01.271
+7  order-7  OrderPlaced order_id=order-7  1          2       16:55:01.277
+8  order-8  OrderPlaced order_id=order-8  2          2       16:55:01.283
+9  order-9  OrderPlaced order_id=order-9  1          3       16:55:01.289
 
 готово. Смотрим ту же картину со стороны лога:
 PARTITION  LATEST
-0          4
-1          3
+0          3
+1          4
 2          3
 TOTAL      10
 ```
 
 Несколько наблюдений по этому выводу.
 
-Каждая запись получила **свой** offset внутри своей партиции. `OrderPlaced` для `order-0`, `order-3`, `order-6`, `order-9` лёг в партицию 0 с offset'ами 0, 1, 2, 3 - четыре сообщения, latest=4. В партиции 1 три сообщения, latest=3. Сумма latest по всем партициям = 10. Всё сходится.
+Каждая запись получила **свой** offset внутри своей партиции. `OrderPlaced` для `order-0`, `order-1`, `order-7`, `order-9` лёг в партицию 1 с offset'ами 0, 1, 2, 3 - четыре сообщения, latest=4. В партиции 0 и 2 по три сообщения, latest=3. Сумма latest по всем партициям = 10. Всё сходится.
 
 Распределение по партициям **детерминированное**, не случайное. Один и тот же `order_id` всегда попадает в одну и ту же партицию. Если перезапустить программу с тем же набором ключей - раскладка повторится (но offset'ы поедут вверх, потому что это новая запись поверх старого лога). Логика partitioner'а это [Ключи и партиционирование](../../../../02-producer/02-01-keys-and-partitioning/i18n/ru/README.md).
 

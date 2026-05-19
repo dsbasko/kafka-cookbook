@@ -14,7 +14,7 @@
 
 ## GroupTransactSession
 
-Можно делать всё руками. Открыть `kgo.Client` с `TransactionalID`, отдельно вести group consumer, при End вызывать `cl.SendOffsetsToTransaction(ctx, offsets, group)`, аккуратно ловить ребалансы. Так и работает «под капотом». Но franz-go даёт обёртку — `kgo.GroupTransactSession`, которая делает три полезные вещи:
+На уровне wire-протокола Kafka это `TxnOffsetCommit` request на координатор группы внутри открытой транзакции, плюс корректная обработка ребалансов. В Java-клиенте под это есть `producer.sendOffsetsToTransaction(offsets, groupMetadata)`. franz-go свой эквивалент (`commitTransactionOffsets` в `pkg/kgo/txn.go:939`) намеренно не экспортирует - в комментарии прямо написано «gigantic footgun if not done properly». Единственный публичный путь к EOS-консьюмеру в franz-go v1.21.0 - обёртка `kgo.GroupTransactSession`, которая делает три полезные вещи:
 
 1. Берёт текущие consumer-offset'ы из своего группового состояния и кладёт их в транзакцию через `TxnOffsetCommitRequest`.
 2. Заворачивает обработку ребалансов в свою логику. Если во время транзакции пришёл revoke — `End(TryCommit)` сам вернёт `committed=false` и аборнет транзакцию, чтобы не закоммитить offset на партиции, которой мы уже не владеем. Это критично: без этой защиты на пути двух consumer'ов, играющих один и тот же partition, появляются дубли.
@@ -154,7 +154,7 @@ EOS, которое мы тут построили — это про Kafka↔Kaf
 
 Второе ограничение — fetch-offset reset. Если pipeline-консьюмер впервые приходит на топик, и при этом в input идёт активный транзакционный продьюсер с долгими in-flight транзакциями — наш fetch будет упираться в last stable offset и стоять. Лечится либо коротким `TransactionTimeout` у источника, либо стартом с конкретной известной позиции вместо ожидания LSO.
 
-И последнее — `TransactionTimeout`. У нас 60 секунд. Если обработка батча займёт больше, координатор сам аборнет транзакцию изнутри, и `End(TryCommit)` вернёт `InvalidTxnState`. Дефолт у Kafka — 1 минута. Если обработка тяжёлая (модель ML, большой DB-batch), таймаут надо поднимать вместе с `delivery.timeout.ms` у downstream'а.
+И последнее — `TransactionTimeout`. У нас выставлено явно 60 секунд (`pkg/kgo/config.go:603` — дефолт franz-go v1.21.0 это 40 секунд, мы его перетёрли, чтобы совпасть с Java-клиентским дефолтом `transaction.timeout.ms=60000`). Если обработка батча займёт больше, координатор сам аборнет транзакцию изнутри, и `End(TryCommit)` вернёт `InvalidTxnState`. Брокерный потолок — `transaction.max.timeout.ms`, дефолт 15 минут (`kafka-configs.sh --describe` на стенде Kafka 4.2.0). Если обработка тяжёлая (модель ML, большой DB-batch), таймаут надо поднимать вместе с `delivery.timeout.ms` у downstream'а — и не выше брокерного потолка.
 
 ## Запуск целиком
 

@@ -4,11 +4,11 @@ The previous module covered committing offsets and processing messages at-least-
 
 Say the `orders` handler must produce a record to `payments` and a record to `shipments`. First, write the payment — success. Between the two `Produce` calls the process crashes. On restart the offset is not committed. The handler starts the order over. Writes the payment again — a second time. Then the shipment. No crash this time. Even if both `Produce` calls were idempotent via producer-id, the restart gave us a new producer with a new id — idempotency didn't help. System state is split.
 
-Kafka transactions address this. They provide atomic multi-partition write — a group of `Produce` requests that either all become visible to the consumer or are all discarded, plus a way to bind a consumer offset commit to that group (covered in the next lecture, [Consume-process-produce](../../../04-02-consume-process-produce/i18n/ru/README.md)). This lecture covers transactions themselves and the foundation: transactional.id, producer epoch, control records, read isolation.
+Kafka transactions address this. They provide atomic multi-partition write — a group of `Produce` requests that either all become visible to the consumer or are all discarded, plus a way to bind a consumer offset commit to that group (covered in the next lecture, [Consume-process-produce](../../../04-02-consume-process-produce/i18n/en/README.md)). This lecture covers transactions themselves and the foundation: transactional.id, producer epoch, control records, read isolation.
 
 ## TransactionalID and producer epoch
 
-The idempotent producer from the [Idempotent producer](../../../../02-producer/02-03-idempotent-producer/i18n/ru/README.md) lecture is just a `producer-id` plus per-partition sequence numbers. The broker sees "hello, I'm the same producer, don't duplicate my record" within one session. But `producer-id` only lives as long as the client does. Process restarts — new id, no memory of the previous session.
+The idempotent producer from the [Idempotent producer](../../../../02-producer/02-03-idempotent-producer/i18n/en/README.md) lecture is just a `producer-id` plus per-partition sequence numbers. The broker sees "hello, I'm the same producer, don't duplicate my record" within one session. But `producer-id` only lives as long as the client does. Process restarts — new id, no memory of the previous session.
 
 Transactions add `transactional.id` on top — a stable, human-readable identifier you set yourself. For a service with N instances, the usual pattern is `<service>-<instance-id>` or `<service>-<consumer-group>-<partition>`. The key property: stable across restarts and unique per logical role.
 
@@ -122,9 +122,9 @@ The output lists `[#XX] commit ✓` and `[#XX] abort ✗` entries, and a final s
 
 ## TransactionTimeout
 
-The coordinator doesn't trust the producer forever. If the producer started a transaction and disappeared, the coordinator aborts it after `transaction.timeout.ms` (default one minute, left as-is in the sandbox). This protects read_committed consumers from unnecessary blocking: they wait for a commit or abort marker, and without the coordinator's timeout they would stall indefinitely.
+The coordinator doesn't trust the producer forever. If the producer started a transaction and disappeared, the coordinator aborts it after the timeout the client passed at init time. The franz-go v1.21.0 default for `TransactionTimeout` is 40 seconds (`pkg/kgo/config.go:603`); the sandbox raises it to one minute via `kgo.TransactionTimeout(60*time.Second)` in the producer code so three records to three topics plus markers fit with margin. The coordinator-side timeout protects read_committed consumers from unnecessary blocking: they wait for a commit or abort marker, and without it they would stall indefinitely.
 
-If you spend a long time doing work inside a transaction (reading, enriching, writing back) — increase `kgo.TransactionTimeout`. Don't confuse it with `MaxTransactionTimeout` on the broker — that caps what the client is allowed to request. Default is 15 minutes.
+If you spend a long time doing work inside a transaction (reading, enriching, writing back) - increase `kgo.TransactionTimeout`. Don't confuse it with the broker-side `transaction.max.timeout.ms` - that caps what the client is allowed to request. Default 15 minutes (Kafka 4.2.0 on the sandbox reports `transaction.max.timeout.ms=900000`).
 
 ## Isolation: read_committed vs read_uncommitted
 
@@ -164,7 +164,7 @@ Terminal 2 will show ~14 × 3 = 42 records (from committed transactions). Termin
 
 When people say "exactly-once in Kafka", it's useful to know where the boundary is.
 
-1. **End-to-end EOS — Kafka↔Kafka only**. If a consumer reads a topic, does something, and writes to another topic — yes, a transaction (plus `SendOffsetsToTransaction` from [Consume-process-produce](../../../04-02-consume-process-produce/i18n/ru/README.md)) gives you an atomic act of "read → write → commit offset". But if you call an HTTP API or write to Postgres without the outbox pattern in between — the Kafka transaction knows nothing about that external write. External sides need separate mechanisms (outbox in [Outbox pattern](../../../04-03-outbox-pattern/i18n/ru/README.md), idempotent receivers in [Delivery to external systems](../../../04-05-external-delivery/i18n/ru/README.md)).
+1. **End-to-end EOS — Kafka↔Kafka only**. If a consumer reads a topic, does something, and writes to another topic — yes, a transaction (plus `SendOffsetsToTransaction` from [Consume-process-produce](../../../04-02-consume-process-produce/i18n/en/README.md)) gives you an atomic act of "read → write → commit offset". But if you call an HTTP API or write to Postgres without the outbox pattern in between — the Kafka transaction knows nothing about that external write. External sides need separate mechanisms (outbox in [Outbox pattern](../../../04-03-outbox-pattern/i18n/en/README.md), idempotent receivers in [Delivery to external systems](../../../04-05-external-delivery/i18n/en/README.md)).
 
 2. **Transaction ≠ "won't fail"**. A transaction fails cleanly: it either commits or aborts. If the process dies mid-transaction before `EndTransaction`, the coordinator aborts it on timeout. No magic will fill in the missing half of the records. For the scenario to be correct, your code must be able to retry with the same input — i.e., be idempotent at the business logic level.
 
@@ -174,7 +174,7 @@ When people say "exactly-once in Kafka", it's useful to know where the boundary 
 
 5. **`transactional.id` outlives the process**. If you chose `transactional.id = "service-instance-7"` and instance 7 died permanently, its id stays in the coordinator with an open transaction until timeout. That's why ids are usually derived from the logical role (a common trick: the input topic partition number). Binding to a k8s pod-id produces a zombie id on every pod restart — don't do that.
 
-## Lead-in to [Consume-process-produce](../../../04-02-consume-process-produce/i18n/ru/README.md)
+## Lead-in to [Consume-process-produce](../../../04-02-consume-process-produce/i18n/en/README.md)
 
 We can now atomically write to N partitions. But the classic pattern is broader: "read → process → write → commit offset", and we need to include the consumer offset commit inside the transaction too. Otherwise a restart fits into the window "already written, not yet committed", and we get a duplicate. This combination — `SendOffsetsToTransaction` plus read_committed on the downstream consumer — is called consume-process-produce and is covered in the next lecture. This lecture gave you the bricks; next comes the wall.
 

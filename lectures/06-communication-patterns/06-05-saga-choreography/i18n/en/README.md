@@ -14,7 +14,7 @@ A customer placed an order for `N` cents. To fulfill it, three steps are require
 
 If anything breaks at any step — roll back the previous ones. Charged the card, no stock — refund. Reserved stock, no couriers — release the reservation and the same refund. Rollbacks don't try to "undo everything atomically": each compensating action is a separate step, with its own success or failure, and it's published as an event just like the forward action.
 
-That's what "compensation" means. Not a rollback — the opposite action.
+That's what "compensation" means: the opposite action, performed as an explicit step.
 
 ## Where they differ
 
@@ -54,7 +54,7 @@ Who subscribes to what:
 - **payment-service** listens to `order-requested`, `inventory-failed`, `inventory-released`. On `order-requested` — hits the payment provider (in this sandbox — a fake via `FAIL_RATE`). On the other two — publishes `payment-refunded`.
 - **inventory-service** listens to `payment-completed`, `shipment-failed`. On the first — reserves stock. On the second — releases the reservation.
 - **shipment-service** listens to `inventory-reserved`. Schedules delivery or fails it.
-- **order-service-choreo** listens to all nine topics and builds an in-memory timeline of each saga. This is an observability watcher, not an executor — added only so the saga's progress is visible in one terminal. In production, tracing handles this, not a service.
+- **order-service-choreo** listens to all nine topics and builds an in-memory timeline of each saga. This is an observability watcher, added only so the saga's progress is visible in one terminal. In production this role is covered by tracing infrastructure, without a dedicated service.
 
 The key thing to internalize: the compensation cascade is itself a chain of events. `shipment-failed` triggers an action in `inventory-service`, which publishes `inventory-released`, which `payment-service` catches and runs the refund. Nobody calls a "rollback all" list. Each link reacts to its own event.
 
@@ -104,7 +104,7 @@ saga-orch.shipment-cmd       ─ shipment-service[orch] listens
 saga-orch.shipment-reply     ─ orchestrator listens
 ```
 
-Six executor topics plus one entry topic — exactly the number of steps and services multiplied by two. Count it. Not magic.
+Six executor topics plus one entry topic — three services with a `cmd/reply` pair each, plus the entry. Count it. Not magic.
 
 Executor services here are simpler than in choreography. They process `<X>Command`, do their job (in this sandbox — pseudo), reply with `<X>Reply`. They don't know what came before them or what comes after. They don't know about compensations in the sense of "correct ordering." A `payment-cmd` with `action=REFUND` will arrive — they'll run the refund.
 
@@ -166,7 +166,7 @@ What's visible here: UPDATE state first, then ProduceSync the next command. Same
 
 UPDATE succeeded, then the process crashed before ProduceSync. `saga_state` says `AWAITING_INVENTORY`, but no command was sent. The saga is stuck. In production this is covered by the transactional outbox (see `04-03`) — UPDATE and INSERT into outbox in one transaction, a separate publisher sends to Kafka and marks the record as published. In this lecture we deliberately keep it simple so the focus stays on the state machine, not the infrastructure. Remember: standalone UPDATE + Produce is at-least-once with a hang risk, and the outbox fixes it.
 
-The second weak spot — duplicate messages from the executor itself. A reply can arrive twice (consumer restarts before offset commit). The orchestrator must react idempotently by `saga_id` and current step. Our protection is simple: `current_step` has already changed, so a second transition from the same `<X>-reply` won't fire (we check the step implicitly through the UPDATE — it only updates what's in the correct phase). But this is a decision — each service carries the requirement: "process a command idempotently by `saga_id` and `action`."
+The second weak spot — duplicate messages from the executor itself. A reply can arrive twice (consumer restarts before offset commit). The lecture's code has no protection for this: `UPDATE saga_state` (see `cmd/orchestrator/main.go:52`) filters only on `saga_id`, without checking `current_step`. A duplicate `<X>-reply` will quietly roll the step backwards and re-emit the next command. Only `place-order` is idempotent, via `INSERT ... ON CONFLICT DO NOTHING`. In production this is fixed either with `WHERE current_step = $expected` in the UPDATE, or with a `processed_events` table keyed on the reply partition offset. Executor services still carry the requirement: "process a command idempotently by `saga_id` and `action`", because the orchestrator will redeliver the same command.
 
 ## Who, when, and why
 
@@ -219,7 +219,7 @@ To observe compensation, run shipment-service with a forced failure:
 make chaos-fail-shipment    # instead of the regular run-shipment-choreo
 ```
 
-Then run `make run-place-order MODE=choreo COUNT=1` again. The timeline will show the full cascade: `inventory-reserved → shipment-failed → inventory-released → payment-refunded`. Eight events instead of four — that's the cost of a rollback.
+Then run `make run-place-order MODE=choreo COUNT=1` again. The timeline will show the full cascade: `order-requested → payment-completed → inventory-reserved → shipment-failed → inventory-released → payment-refunded`. Six events instead of four — that's the cost of a rollback: two extra steps to release the reservation and refund the money.
 
 ### Orchestration
 

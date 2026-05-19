@@ -90,7 +90,7 @@ func main() {
 		{topic: *mainTopic, delay: 0, nextTopic: *retry30},
 		{topic: *retry30, delay: *delay30s, nextTopic: *retry5m},
 		{topic: *retry5m, delay: *delay5m, nextTopic: *retry1h},
-		{topic: *retry1h, delay: *delay1h, nextTopic: *dlq},
+		{topic: *retry1h, delay: *delay1h, nextTopic: ""},
 	}
 
 	if err := run(rootCtx, stages, *dlq, *group, *fromStart); err != nil && !errors.Is(err, context.Canceled) {
@@ -129,7 +129,11 @@ func run(ctx context.Context, stages []stage, dlqTopic, group string, fromStart 
 	fmt.Printf("processor запущен: group=%q\n", group)
 	fmt.Println("ступени пайплайна:")
 	for _, s := range stages {
-		fmt.Printf("  %-22s delay=%-6s next=%s\n", s.topic, s.delay, s.nextTopic)
+		next := s.nextTopic
+		if next == "" {
+			next = dlqTopic + " (exhausted)"
+		}
+		fmt.Printf("  %-22s delay=%-6s next=%s\n", s.topic, s.delay, next)
 	}
 	fmt.Printf("  %-22s (terminal — больше не эскалируем)\n", dlqTopic)
 	fmt.Println()

@@ -6,7 +6,7 @@ Why complicate things? Let's break it down.
 
 ## Why in-place retry stops being enough
 
-The main problem with in-place retry is that it sits inside the poll loop. While you're trying five times to reach a broken downstream, the consumer doesn't call poll. If those attempts exceed `max.poll.interval.ms` (default 5 minutes), the group considers you dead and takes the partition away. Then it gets worse: you'll repeat those attempts again, on a different consumer, because the new partition owner reads the same offset.
+The main problem with in-place retry is that it sits inside the poll loop. While you're trying five times to reach a broken downstream, the consumer doesn't call poll. In franz-go v1.21.0 the heartbeat loop runs independently of handler work, so a long backoff alone won't kick you out of the group — the coordinator considers the client alive as long as the network heartbeat keeps flowing. The failure mode hits during a rebalance (a new member joined, the leader changed, a broker went down): if the handler is sitting in backoff at that moment, it has only `RebalanceTimeout` (`rebalance.timeout.ms`, default 60 seconds in franz-go v1.21.0) to wrap up and rejoin. Miss that window and the coordinator kicks the client; the partition moves to another member, which picks up the same offset with the same error. In the Java client the mechanics are stricter: `max.poll.interval.ms` (default 5 minutes) is enforced between `poll()` calls and exceeding it kicks the consumer immediately, with no dependency on a rebalance.
 
 That's the first argument. The second — head-of-line blocking. You have 1000 messages in one partition, one of them is broken. It takes thirty seconds. All 999 behind it wait. That's a hot-line caused by a single garbage record.
 
@@ -61,9 +61,11 @@ stages := []stage{
     {topic: *mainTopic, delay: 0, nextTopic: *retry30},
     {topic: *retry30, delay: *delay30s, nextTopic: *retry5m},
     {topic: *retry5m, delay: *delay5m, nextTopic: *retry1h},
-    {topic: *retry1h, delay: *delay1h, nextTopic: *dlq},
+    {topic: *retry1h, delay: *delay1h, nextTopic: ""},
 }
 ```
+
+The empty `nextTopic` on the last retry stage is a "nothing left to escalate" flag. `forwardOrDLQ` sees the empty string and pushes the record to the DLQ with `reason=exhausted`. If we passed `*dlq` directly here, the log would read `reason=next-retry`, and the three cases (`next-retry` / `permanent` / `exhausted`) would collapse into two.
 
 One consumer in group `lecture-04-04-processor` subscribes to all four topics. Before `handle()` we check the stage's `delay` and, if it's positive, wait until `record.Timestamp + delay`. This is the heart of the retry mechanic:
 

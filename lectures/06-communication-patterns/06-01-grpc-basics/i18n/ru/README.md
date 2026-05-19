@@ -39,7 +39,7 @@ service OrderService {
 }
 ```
 
-Каждый метод — это `rpc <Имя>(<запрос>) returns (<ответ>)`. Запрос и ответ — обычные Protobuf-сообщения. Соглашение для unary: на каждый метод отдельная пара `XxxRequest` / `XxxResponse`. Звучит избыточно, но окупается на первой же эволюции — добавил поле в `CreateRequest`, и это никак не задело `Create`-respons или `GetRequest`. Если заводить общий тип — придётся выкручиваться позже.
+Каждый метод — это `rpc <Имя>(<запрос>) returns (<ответ>)`. Запрос и ответ — обычные Protobuf-сообщения. Соглашение для unary: на каждый метод отдельная пара `XxxRequest` / `XxxResponse`. Звучит избыточно, но окупается на первой же эволюции — добавил поле в `CreateRequest`, и это никак не задело `CreateResponse` или `GetRequest`. Если заводить общий тип — придётся выкручиваться позже.
 
 Реальный контракт лекции лежит в `proto/orders/v1/orders.proto`. Кроме сервиса там сидят `Order`, `OrderStatus` (enum с префиксом `ORDER_STATUS_` — это buf-конвенция), `CreateRequest`, `CreateResponse`, `GetRequest`, `GetResponse`.
 
@@ -192,7 +192,7 @@ func loggingUnaryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
             return resp, err
         }
         logger.Info("rpc", "method", info.FullMethod, "code", code, "dur", dur)
-        return nil
+        return resp, nil
     }
 }
 ```

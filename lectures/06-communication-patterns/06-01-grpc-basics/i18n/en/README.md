@@ -8,7 +8,7 @@ For a synchronous request-response there's another tool. HTTP/REST is the classi
 
 gRPC is an RPC framework on top of HTTP/2. Serialization is Protobuf (covered in module 05). You describe the service in a `.proto` file, the code generator produces a Go server interface and a Go client. Implement the interface — you get a working server. Import the client — you get a ready stub with typed methods. No manual JSON marshaling, no URL routers.
 
-The transport underneath is HTTP/2. That gives you multiplexing (many calls over one connection), streams (covered in [gRPC streaming](../../../06-02-grpc-streaming/i18n/ru/README.md)), binary frames, and header compression. At the network level it's still TCP plus TLS, but the frames are HTTP/2.
+The transport underneath is HTTP/2. That gives you multiplexing (many calls over one connection), streams (covered in [gRPC streaming](../../../06-02-grpc-streaming/i18n/en/README.md)), binary frames, and header compression. At the network level it's still TCP plus TLS, but the frames are HTTP/2.
 
 Four RPC types:
 
@@ -30,7 +30,7 @@ Storage is a `map[string]*Order` under an `RWMutex`. No database, no Kafka. This
 
 ## The .proto file
 
-The contract is described in a single file. Type safety and compatibility come from Protobuf, same as in [Protobuf in Go](../../../../05-contracts/05-02-protobuf-in-go/i18n/ru/README.md) / [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/ru/README.md). What's new here is the `service` keyword and method declarations.
+The contract is described in a single file. Type safety and compatibility come from Protobuf, same as in [Protobuf in Go](../../../../05-contracts/05-02-protobuf-in-go/i18n/en/README.md) / [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/en/README.md). What's new here is the `service` keyword and method declarations.
 
 ```proto
 service OrderService {
@@ -192,7 +192,7 @@ func loggingUnaryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
             return resp, err
         }
         logger.Info("rpc", "method", info.FullMethod, "code", code, "dur", dur)
-        return nil
+        return resp, nil
     }
 }
 ```
@@ -267,16 +267,16 @@ make grpcurl-create                               # create an order
 make grpcurl-get ID=<uuid from Create response>  # retrieve it back
 ```
 
-Note — the server is stateful, the store lives in memory. Restart the server and all orders are gone. That's the boundary of this lesson: we built a bare gRPC service, no database, no Kafka, no authentication. In [Hybrid gRPC + Kafka](../../../06-04-hybrid-grpc-and-kafka/i18n/ru/README.md) this same service grows Postgres, an outbox table, and event publishing — there you'll see how gRPC and Kafka coexist in one process.
+Note — the server is stateful, the store lives in memory. Restart the server and all orders are gone. That's the boundary of this lesson: we built a bare gRPC service, no database, no Kafka, no authentication. In [Hybrid gRPC + Kafka](../../../06-04-hybrid-grpc-and-kafka/i18n/en/README.md) this same service grows Postgres, an outbox table, and event publishing — there you'll see how gRPC and Kafka coexist in one process.
 
 ## What's next
 
-[gRPC streaming](../../../06-02-grpc-streaming/i18n/ru/README.md) — streams. Server-stream, client-stream, bidi. Also covers backpressure on streams and how a gRPC stream fundamentally differs from a Kafka stream (short answer — durability and replay).
+[gRPC streaming](../../../06-02-grpc-streaming/i18n/en/README.md) — streams. Server-stream, client-stream, bidi. Also covers backpressure on streams and how a gRPC stream fundamentally differs from a Kafka stream (short answer — durability and replay).
 
-[Sync vs async: gRPC and Kafka](../../../06-03-sync-vs-async/i18n/ru/README.md) — decision matrix: when to use gRPC, when to use Kafka. Using "user signed up" as an example with honest trade-offs for both approaches.
+[Sync vs async: gRPC and Kafka](../../../06-03-sync-vs-async/i18n/en/README.md) — decision matrix: when to use gRPC, when to use Kafka. Using "user signed up" as an example with honest trade-offs for both approaches.
 
-[Hybrid gRPC + Kafka](../../../06-04-hybrid-grpc-and-kafka/i18n/ru/README.md) — hybrid: gRPC for the synchronous API + Kafka for events + outbox for atomicity.
+[Hybrid gRPC + Kafka](../../../06-04-hybrid-grpc-and-kafka/i18n/en/README.md) — hybrid: gRPC for the synchronous API + Kafka for events + outbox for atomicity.
 
-[Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/ru/README.md) — sagas and compensations, choreography vs orchestration.
+[Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/en/README.md) — sagas and compensations, choreography vs orchestration.
 
 For now — go to the terminal and run `make run-server` plus `make run-client`. Look at the log. Then we move on.

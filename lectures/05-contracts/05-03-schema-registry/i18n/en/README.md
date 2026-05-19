@@ -1,6 +1,6 @@
 # 05-03 — Schema Registry
 
-In [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/ru/README.md) the producer wrote raw protobuf bytes to Kafka and put a `schema: orders.v1.Order` string in the headers. That works exactly as long as you are the only one writing to this topic. Then the familiar story begins. A new Python service joins the team with its own generated code and its own view on how to marshal. Someone changes a field without telling anyone. Someone dumps JSON in there "temporarily, for a demo." Six months later the topic holds a zoo of four incompatible formats, and nobody remembers which one is "correct."
+In [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/en/README.md) the producer wrote raw protobuf bytes to Kafka and put a `schema: orders.v1.Order` string in the headers. That works exactly as long as you are the only one writing to this topic. Then the familiar story begins. A new Python service joins the team with its own generated code and its own view on how to marshal. Someone changes a field without telling anyone. Someone dumps JSON in there "temporarily, for a demo." Six months later the topic holds a zoo of four incompatible formats, and nobody remembers which one is "correct."
 
 Schema Registry is an attempt to treat exactly that pain. A single source of truth for schemas. Every producer gets a `schema_id` from it before writing and puts that id in the first bytes of the payload. Every consumer finds the schema by that id — and once it knows the schema, it parses the message correctly.
 
@@ -10,7 +10,7 @@ The lecture covers how this is arranged on the wire, how `franz-go` handles it t
 
 Confluent Schema Registry is a standalone service with a REST API. It has its own storage: the key is a `(subject, version)` pair, the value is the schema text plus its type. SR supports multiple notations — we use Protobuf, Avro usually lives alongside it. On registration the service returns a globally-unique `schema_id` — an integer that travels into Kafka.
 
-Subject is the "logical contract name." The default convention (TopicNameStrategy) is `<topic>-value` for values and `<topic>-key` for keys. Inside a single subject lives a chain of versions — you add a field to the schema, register a new version, get a new id; old ids stay. Schema evolution is covered in [Schema Evolution](../../../05-04-schema-evolution/i18n/ru/README.md).
+Subject is the "logical contract name." The default convention (TopicNameStrategy) is `<topic>-value` for values and `<topic>-key` for keys. Inside a single subject lives a chain of versions — you add a field to the schema, register a new version, get a new id; old ids stay. Schema evolution is covered in [Schema Evolution](../../../05-04-schema-evolution/i18n/en/README.md).
 
 In our sandbox SR runs on `http://localhost:8081`. It has a few dozen endpoints; the ones we need are:
 
@@ -35,7 +35,7 @@ Confluent wire format for a value:
 +---------+---------------+----------------+----------------+
 ```
 
-First — a zero magic byte. Then four bytes of `schema_id` in big-endian. Then the message-index: a zigzag-encoded varint for protobuf that carries the path to the target message inside the `.proto` file (if the file has multiple messages, the index says which one). For a single top-level message it is a lone byte `0x00`. Only then comes the serialized payload itself.
+First — a zero magic byte. Then four bytes of `schema_id` in big-endian. Then the message-index: a length-prefixed array of zigzag-encoded varints (for protobuf) that carries the path to the target message inside the `.proto` file (multiple top-level messages — the array picks one; nested messages — a full path through the tree). For the common case `[0]` (first top-level message) there is a shortcut: a single byte `0x00` instead of two (`[len=1][idx=0]`). Only then comes the serialized payload itself.
 
 Avro and JSON do not need a message-index — they unambiguously describe a single message, magic byte and id are enough. Protobuf is historically like this because a single `.proto` can contain any number of messages.
 
@@ -134,7 +134,7 @@ This means: SR is useful for **wire format validation** and **evolution manageme
 
 Dynamic Decode (via `dynamicpb`) is used mainly in tooling — kcat, Kafka UI, various test utilities, sometimes debug sidecars. A production service is typically pinned to a specific version.
 
-Printing itself uses the ordinary generated getters, as in [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/ru/README.md):
+Printing itself uses the ordinary generated getters, as in [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/en/README.md):
 
 ```go
 fmt.Printf("--- %s/%d@%d key=%s schema_id=%d ---\n",
@@ -212,10 +212,10 @@ Run `make run-producer` again — the id does not change. SR sees the same schem
 - `sr.Index(0)` for a top-level message is mandatory for Protobuf; without it the magic byte `0x00` after schema_id will not appear and the Confluent Java client won't be able to read it. Avro and JSON do not require this.
 - `sr.Serde` stores the `id -> tserde` mapping under an `atomic.Value`. That means — safe for concurrent reads, registration under a mutex. Using one Serde from multiple goroutines is safe (and the right approach).
 - DELETE on a subject is an operation to treat carefully. Soft-delete (`DELETE /subjects/<sub>`) removes the subject but the id stays in the registry under its own key — old messages in Kafka can still be decoded. Hard-delete (`?permanent=true`) erases the id permanently, making old messages unreadable. In our Makefile `clean` does a hard-delete for reproducibility — do not do that in production.
-- `gen/` is committed to the repo. Same reasoning as in [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/ru/README.md): reproducibility without `buf` on a clean clone, and reviewers can see how generated code reacts to schema edits.
+- `gen/` is committed to the repo. Same reasoning as in [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/en/README.md): reproducibility without `buf` on a clean clone, and reviewers can see how generated code reacts to schema edits.
 
 ## What's next
 
-[Schema Evolution](../../../05-04-schema-evolution/i18n/ru/README.md) covers schema evolution. What BACKWARD/FORWARD/FULL compatibility means, which Protobuf changes SR will accept and which it won't. And how `buf breaking` catches breaking changes before they even reach SR.
+[Schema Evolution](../../../05-04-schema-evolution/i18n/en/README.md) covers schema evolution. What BACKWARD/FORWARD/FULL compatibility means, which Protobuf changes SR will accept and which it won't. And how `buf breaking` catches breaking changes before they even reach SR.
 
 From here it is already clear why the Registry exists at all: it alone knows exactly which schemas are live in the system, and it blocks anything that would break consumers from entering the registry.

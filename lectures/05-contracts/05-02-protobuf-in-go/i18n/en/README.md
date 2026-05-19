@@ -13,15 +13,17 @@ Generated Go code is the `*.pb.go` that `protoc` or its wrapper `buf` emits. Ins
 ```go
 type Order struct {
     Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" ...`
-    CustomerId     string                 `protobuf:"bytes,2,opt,name=customer_id,proto3,json=customerId" ...`
-    AmountCents    int64                  `protobuf:"varint,3,opt,name=amount_cents,proto3,json=amountCents" ...`
+    CustomerId     string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" ...`
+    AmountCents    int64                  `protobuf:"varint,3,opt,name=amount_cents,json=amountCents,proto3" ...`
     Status         OrderStatus            `protobuf:"varint,7,opt,name=status,proto3,enum=orders.v1.OrderStatus" ...`
-    CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,proto3,json=createdAt" ...`
-    ReservationTtl *durationpb.Duration   `protobuf:"bytes,9,opt,name=reservation_ttl,proto3,json=reservationTtl" ...`
-    Note           *string                `protobuf:"bytes,11,opt,name=note,proto3" ...`
+    CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" ...`
+    ReservationTtl *durationpb.Duration   `protobuf:"bytes,9,opt,name=reservation_ttl,json=reservationTtl,proto3" ...`
+    Note           *string                `protobuf:"bytes,11,opt,name=note,proto3,oneof" ...`
     // ... more fields and unexported internals
 }
 ```
+
+Snake_case fields carry a `json=camelCase` marker in the tag — that is what `protojson` uses to serialize Protobuf into JSON following the camelCase convention. `Note` ends with `oneof` in its tag — proto3 `optional` is implemented under the hood as a synthetic single-field oneof, and the generated code makes that explicit.
 
 You never write manual `appendString` calls again. Fields are ordinary Go types, getters are auto-generated (`GetId()`, `GetStatus()`, `GetItems()`), and serialization is a single call to `proto.Marshal(order)`.
 
@@ -133,7 +135,7 @@ rec := &kgo.Record{
 res := cl.ProduceSync(ctx, rec)
 ```
 
-Three things worth noting here. First, `proto.Marshal` accepts any `*proto.Message` — `*ordersv1.Order` is one, because generated code implements the required interface automatically. Second, the header `content-type: application/x-protobuf` is a discipline, not a protocol requirement; the consumer still needs to know which type to `Unmarshal` into. Third, the header `schema: orders.v1.Order` is our manual substitute for a `schema_id` from Schema Registry. In [Schema Registry](../../../05-03-schema-registry/i18n/en/README.md) this string will be replaced by `magic byte + schema_id`, and the Registry will store the `.proto` files themselves.
+Three things worth noting here. First, `proto.Marshal` accepts any `proto.Message` (an interface from `google.golang.org/protobuf/proto`) — `*ordersv1.Order` satisfies it, because generated code implements the required interface automatically. Second, the header `content-type: application/x-protobuf` is a discipline, not a protocol requirement; the consumer still needs to know which type to `Unmarshal` into. Third, the header `schema: orders.v1.Order` is our manual substitute for a `schema_id` from Schema Registry. In [Schema Registry](../../../05-03-schema-registry/i18n/en/README.md) this string will be replaced by `magic byte + schema_id`, and the Registry will store the `.proto` files themselves.
 
 Assembling an Order from generated types is ordinary Go:
 

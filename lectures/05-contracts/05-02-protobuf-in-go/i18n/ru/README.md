@@ -13,15 +13,17 @@
 ```go
 type Order struct {
     Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" ...`
-    CustomerId     string                 `protobuf:"bytes,2,opt,name=customer_id,proto3,json=customerId" ...`
-    AmountCents    int64                  `protobuf:"varint,3,opt,name=amount_cents,proto3,json=amountCents" ...`
+    CustomerId     string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" ...`
+    AmountCents    int64                  `protobuf:"varint,3,opt,name=amount_cents,json=amountCents,proto3" ...`
     Status         OrderStatus            `protobuf:"varint,7,opt,name=status,proto3,enum=orders.v1.OrderStatus" ...`
-    CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,proto3,json=createdAt" ...`
-    ReservationTtl *durationpb.Duration   `protobuf:"bytes,9,opt,name=reservation_ttl,proto3,json=reservationTtl" ...`
-    Note           *string                `protobuf:"bytes,11,opt,name=note,proto3" ...`
+    CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" ...`
+    ReservationTtl *durationpb.Duration   `protobuf:"bytes,9,opt,name=reservation_ttl,json=reservationTtl,proto3" ...`
+    Note           *string                `protobuf:"bytes,11,opt,name=note,proto3,oneof" ...`
     // ... еще поля и unexported служебные
 }
 ```
+
+В тегах поля с `snake_case` именем содержат маркер `json=camelCase` — это нужно для `protojson`, который сериализует Protobuf в JSON по camelCase-конвенции. У `Note` в конце тега стоит `oneof` — proto3 `optional` под капотом реализуется как синтетический oneof из одного поля, и сгенерированный код это явно фиксирует.
 
 Никаких ручных `appendString` ты больше не пишешь. Поля — обычные Go-типы, getter'ы автогенерятся (`GetId()`, `GetStatus()`, `GetItems()`), а сериализация — это один вызов `proto.Marshal(order)`.
 
@@ -133,7 +135,7 @@ rec := &kgo.Record{
 res := cl.ProduceSync(ctx, rec)
 ```
 
-Три вещи тут стоит зафиксировать. Во-первых, `proto.Marshal` принимает любой `*proto.Message` — `*ordersv1.Order` им и является, потому что сгенерированный код реализует нужный интерфейс автоматически. Во-вторых, header `content-type: application/x-protobuf` — это дисциплина, не требование протокола; consumer всё равно должен знать, в какой тип `Unmarshal`-ить. В-третьих, header `schema: orders.v1.Order` — наша ручная замена schema_id из Schema Registry. В [Schema Registry](../../../05-03-schema-registry/i18n/ru/README.md) эту строку заменит `magic byte + schema_id`, а Registry будет хранить сами `.proto`-файлы.
+Три вещи тут стоит зафиксировать. Во-первых, `proto.Marshal` принимает любой `proto.Message` (это интерфейс из `google.golang.org/protobuf/proto`) — `*ordersv1.Order` им и является, потому что сгенерированный код реализует нужный интерфейс автоматически. Во-вторых, header `content-type: application/x-protobuf` — это дисциплина, не требование протокола; consumer всё равно должен знать, в какой тип `Unmarshal`-ить. В-третьих, header `schema: orders.v1.Order` — наша ручная замена schema_id из Schema Registry. В [Schema Registry](../../../05-03-schema-registry/i18n/ru/README.md) эту строку заменит `magic byte + schema_id`, а Registry будет хранить сами `.proto`-файлы.
 
 Сборка Order'а через сгенерированные типы — обычный Go:
 

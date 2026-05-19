@@ -1,6 +1,6 @@
 # 04-05 — External Delivery
 
-In [Retry and DLQ deep dive](../../../04-04-retry-and-dlq/i18n/ru/README.md) we covered retries and DLQ inside Kafka — where the failure source was our own processing logic or a neighboring service we also write to via Kafka. This is a different scenario. A notification arrives from a topic and must be delivered to an external HTTP receiver: a partner webhook, a push provider, a third-party platform. The task sounds simple. In practice, this is exactly where end-to-end guarantees most often fall apart, because the external downstream lives by its own rules — its own rate limit, its own timeouts, its own security policies, and its own failure schedule.
+In [Retry and DLQ deep dive](../../../04-04-retry-and-dlq/i18n/en/README.md) we covered retries and DLQ inside Kafka — where the failure source was our own processing logic or a neighboring service we also write to via Kafka. This is a different scenario. A notification arrives from a topic and must be delivered to an external HTTP receiver: a partner webhook, a push provider, a third-party platform. The task sounds simple. In practice, this is exactly where end-to-end guarantees most often fall apart, because the external downstream lives by its own rules — its own rate limit, its own timeouts, its own security policies, and its own failure schedule.
 
 ## What makes "external delivery" different
 
@@ -94,9 +94,9 @@ One Execute = one event for the CB. How many retry iterations happened inside is
 
 The CB by itself does not stop the consumer. It only cuts HTTP calls. What does our poll loop do while the CB is Open? It keeps fetching new messages from Kafka, running them through the CB, and catching `ErrOpenState`. This is pointless activity — the fetch buffer grows, messages accumulate, we "process" them (bouncing instantly), don't commit, then the next iteration picks them up again. A race.
 
-The fix — tell the Kafka client at its level "don't pull new fetches for now." In franz-go this is `cl.PauseFetchPartitions(...)` or `cl.PauseFetchTopics(...)`. After the call, PollFetches simply returns empty until `ResumeFetchTopics` is called. No producer-side fetches, nothing in-flight grows, we wait calmly for the CB to recover.
+The fix — tell the Kafka client at its level "don't pull new fetches for now." In franz-go this is `cl.PauseFetchPartitions(...)` or `cl.PauseFetchTopics(...)`. After the call, PollFetches returns empty for those topics until `ResumeFetchTopics` is called (`pkg/kgo/consumer.go:655` — topic pause is independent from individual `PauseFetchPartitions`). No new FetchRequests go to the broker, already-buffered records for paused topics are filtered out at `takeBuffered(paused)` (`pkg/kgo/consumer.go:542`), nothing in-flight grows. The heartbeat loop keeps running as usual — the partitions stay assigned to us, no rebalance is triggered.
 
-There is one nuance — pausing exactly on every CB Open transition is risky. The CB can flap: 5 failures in a row, opens, checks a probe after 15 seconds, probe passes, closes, 200 ms later another 5 in a row, opens again. If we pause on every Open and resume on every Half-Open — that's noise for the group coordinator and a messy log. So we set a threshold: pause only if the CB has been Open longer than `pause-after`.
+There is one nuance — pausing exactly on every CB Open transition is risky. The CB can flap: 5 failures in a row, opens, checks a probe after 15 seconds, probe passes, closes, 200 ms later another 5 in a row, opens again. Pause/Resume is purely client-side state — the group coordinator knows nothing about it (`pkg/kgo/consumer.go:655` — no RPC, just an internal atomic flag). So the "noise" here is not network traffic but a messy log and a sawtooth lag chart — fetches stop and start in a jagged pattern. To avoid that sawtooth, we set a threshold: pause only if the CB has been Open longer than `pause-after`.
 
 Here's how it's wired together. First, the CB callback:
 
@@ -187,7 +187,7 @@ default:
 }
 ```
 
-Internal rule: anything we mark `errPermanent`, run() recognizes via `errors.Is` and commits calmly — even without delivery. A garbage message must not block a partition forever. If losing it is unacceptable — you need a retry pipeline and DLQ from [Retry and DLQ deep dive](../../../04-04-retry-and-dlq/i18n/ru/README.md) alongside, so permanent messages at least land in a DLQ incident log. In this lesson we simplified it to commit-without-delivery to keep the topic focused.
+Internal rule: anything we mark `errPermanent`, run() recognizes via `errors.Is` and commits calmly — even without delivery. A garbage message must not block a partition forever. If losing it is unacceptable — you need a retry pipeline and DLQ from [Retry and DLQ deep dive](../../../04-04-retry-and-dlq/i18n/en/README.md) alongside, so permanent messages at least land in a DLQ incident log. In this lesson we simplified it to commit-without-delivery to keep the topic focused.
 
 ## What the mock-webhook does
 

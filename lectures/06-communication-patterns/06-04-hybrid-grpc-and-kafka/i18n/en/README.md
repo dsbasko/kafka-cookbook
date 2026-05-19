@@ -2,7 +2,7 @@
 
 The previous lecture compared synchronous gRPC and asynchronous Kafka on the same "user signed up" scenario. There is no winner. One gives low latency and predictable errors. The other gives decoupling and replay. In a real service you rarely pick just one. More often you take both and build a hybrid.
 
-This lecture covers the most common shape of that hybrid: write-side with a gRPC API, an event bus through Kafka, and a separate read-side. The lecture is conceptual, on a single-node setup; the production variant with multi-node, integration tests, and failure recovery is the use case [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/ru/README.md) in module 09. Here — the pattern in its pure form.
+This lecture covers the most common shape of that hybrid: write-side with a gRPC API, an event bus through Kafka, and a separate read-side. The lecture is conceptual, on a single-node setup; the production variant with multi-node, integration tests, and failure recovery is the use case [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/en/README.md) in module 09. Here — the pattern in its pure form.
 
 ## Why both at all
 
@@ -65,7 +65,7 @@ One Postgres for all three for compactness — in production each service has it
 
 ## Write path: orders + outbox in one transaction
 
-The key rule of the write path: no Produce inside the RPC handler. If the process crashes after Produce and before COMMIT — there's a Kafka event for an order that doesn't exist in the DB. No amount of idempotency fixes that. The [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/ru/README.md) lecture covered this in detail — here we reuse the same pattern.
+The key rule of the write path: no Produce inside the RPC handler. If the process crashes after Produce and before COMMIT — there's a Kafka event for an order that doesn't exist in the DB. No amount of idempotency fixes that. The [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/en/README.md) lecture covered this in detail — here we reuse the same pattern.
 
 In the transaction we write both the order itself and a "publish later" row to the outbox. That's it. The actual publishing is a separate step, and a publishing failure does not break DB consistency.
 
@@ -184,7 +184,7 @@ if _, err := pool.Exec(ctx, reserveSQL, evt.ID, evt.CustomerID, evt.AmountCents)
 }
 ```
 
-One UPSERT into `inventory_reservations`, no references to orders. In a real system there would be its own DB, its own stock check, and if the reservation fails — publishing an `order.rejected` event that returns to order-side and transitions the order to CANCELLED. That's a choreography saga, a separate lecture ([Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/ru/README.md)).
+One UPSERT into `inventory_reservations`, no references to orders. In a real system there would be its own DB, its own stock check, and if the reservation fails — publishing an `order.rejected` event that returns to order-side and transitions the order to CANCELLED. That's a choreography saga, a separate lecture ([Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/en/README.md)).
 
 ## Tracing context propagation
 
@@ -256,14 +256,14 @@ make db-truncate           # truncate all tables (RESTART IDENTITY)
 
 ## What this lecture deliberately doesn't do
 
-- No multi-node. Each service has one instance. The [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/ru/README.md) use case will have 2-3 nodes per service, the recommended production setup.
+- No multi-node. Each service has one instance. The [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/en/README.md) use case will have 2-3 nodes per service, the recommended production setup.
 - No integration tests. Lectures aren't tested; tests live in the use cases.
-- No failure recovery beyond at-least-once + dedup. No sagas, no compensation, no reject flow. That's a use case or [Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/ru/README.md).
-- No Schema Registry. Payload is raw JSON. This is the concept level; the production variant is Protobuf through SR (lecture [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/ru/README.md)), but here we focus on the hybrid itself to avoid pulling SR into every file.
-- The outbox publisher is in the same process as the gRPC server. That's fine for a lecture and for small services; in large systems it's extracted into a separate binary (or CDC via Debezium — lecture [Debezium CDC](../../../../07-streams-and-connect/07-04-debezium-cdc/i18n/ru/README.md)).
+- No failure recovery beyond at-least-once + dedup. No sagas, no compensation, no reject flow. That's a use case or [Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/en/README.md).
+- No Schema Registry. Payload is raw JSON. This is the concept level; the production variant is Protobuf through SR (lecture [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/en/README.md)), but here we focus on the hybrid itself to avoid pulling SR into every file.
+- The outbox publisher is in the same process as the gRPC server. That's fine for a lecture and for small services; in large systems it's extracted into a separate binary (or CDC via Debezium — lecture [Debezium CDC](../../../../07-streams-and-connect/07-04-debezium-cdc/i18n/en/README.md)).
 
 ## Key takeaways
 
 The gRPC + Kafka hybrid splits the work across two axes. The synchronous API answers the client right now. Async effects happen later, without looking back at the client. Outbox closes the gap between the DB and Kafka. CQRS separates write from read — each side evolves at its own pace. Eventual consistency here is a contract. It fires reliably, and treating it as a bug means designing the system with the wrong expectation.
 
-This picture is worth keeping in mind for anyone designing a backend of any complexity beyond "one service → one DB". Next come sagas (when you need to coordinate multiple services in a single business process) and stream processing (when the event log is the primary carrier of business logic). Lectures [Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/ru/README.md) and 07-* cover that.
+This picture is worth keeping in mind for anyone designing a backend of any complexity beyond "one service → one DB". Next come sagas (when you need to coordinate multiple services in a single business process) and stream processing (when the event log is the primary carrier of business logic). Lectures [Saga: choreography vs orchestration](../../../06-05-saga-choreography/i18n/en/README.md) and 07-* cover that.

@@ -1,6 +1,6 @@
 # 05-04 — Schema Evolution
 
-In [Schema Registry](../../../05-03-schema-registry/i18n/ru/README.md) we taught the producer and consumer to coordinate through Schema Registry: one registers the schema, the other fetches it by `schema_id`. While there's only one schema — everything is quiet. But the contract lives. A month later a request comes in: "let's add a currency to Order". Six months later — "now a shipping address too". A year from now someone will propose changing `amount_cents` to string because the frontend finds it convenient. And that's where things get interesting.
+In [Schema Registry](../../../05-03-schema-registry/i18n/en/README.md) we taught the producer and consumer to coordinate through Schema Registry: one registers the schema, the other fetches it by `schema_id`. While there's only one schema — everything is quiet. But the contract lives. A month later a request comes in: "let's add a currency to Order". Six months later — "now a shipping address too". A year from now someone will propose changing `amount_cents` to string because the frontend finds it convenient. And that's where things get interesting.
 
 This lecture is about the discipline of change. What you can safely change in Protobuf, what — never. What compatibility modes SR supports. What `buf breaking` does and why it belongs in CI. How all of this fits into rolling deployment, when producer-3 and consumer-1 are running in production at the same time.
 
@@ -72,7 +72,7 @@ In real life you wouldn't do this: normally a `.proto` file lives in one package
 
 ## buf breaking — gate in CI
 
-`buf breaking` compares two states of a schema and reports incompatibilities according to a chosen set of rules. Our `buf.yaml` has `breaking: use: FILE` — that's "broke at the file level". It checks type, number, required-ness, presence — everything on the list of rules buf publishes in its docs.
+`buf breaking` compares two states of a schema and reports incompatibilities according to a chosen set of rules. Our `buf.yaml` has `breaking: use: FILE` — buf's strictest set (FILE ⊃ PACKAGE ⊃ WIRE_JSON ⊃ WIRE), catching wire-format changes, field renames, field deletions, and file renames. It checks type, number, required-ness, presence — everything on the list of rules buf publishes in its docs.
 
 In a real project you typically compare "the current PR" against "main". The lecture doesn't have git-ref infrastructure, so the Makefile does it manually: copies `proto/orders/v3/order.proto` and `proto/orders/v4_breaking/order.proto` into a tmp directory, builds them into buf images, and runs breaking against each other:
 
@@ -94,8 +94,8 @@ proto-breaking-check:
 The run produces something like:
 
 ```
-order.proto:35:1:Previously present field "4" with name "currency" on message "Order" was deleted.
-order.proto:38:3:Field "3" with name "amount_cents" on message "Order" changed type from "int64" to "string".
+order.proto:32:1:Previously present field "4" with name "currency" on message "Order" was deleted.
+order.proto:35:3:Field "3" with name "amount_cents" on message "Order" changed type from "int64" to "string".
 
 OK: buf correctly reported the v3 → v4_breaking incompatibility
 ```
@@ -214,6 +214,6 @@ make clean                        # delete topics, subjects, and gen/
 
 ## Related lectures
 
-- [Schema Registry](../../../05-03-schema-registry/i18n/ru/README.md) — wire format and basic registration
-- [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/ru/README.md) — `.proto`, buf, codegen
-- [Why contracts and wire formats](../../../05-01-why-contracts-and-wire-formats/i18n/ru/README.md) — why schemas exist at all
+- [Schema Registry](../../../05-03-schema-registry/i18n/en/README.md) — wire format and basic registration
+- [Protobuf in Go](../../../05-02-protobuf-in-go/i18n/en/README.md) — `.proto`, buf, codegen
+- [Why contracts and wire formats](../../../05-01-why-contracts-and-wire-formats/i18n/en/README.md) — why schemas exist at all

@@ -4,7 +4,7 @@ Up to this point, we treated Kafka as a transport: write messages, read messages
 
 But there is a second large class of workloads — where we want to **compute something over the stream**. Average value per minute. Top-10 users per hour. How many times a card was tapped in the last 5 seconds. Offsets alone are not enough here.
 
-That is stream processing. This lesson is an introduction — we'll get into the code in [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md). Here — the ideas. What event-time is, how it differs from processing-time, what windowing is, why it is almost always event-time-based, what "late events" means, and why watermark is needed. Plus short notes on KStream/KTable, repartitioning, and stateful operations — vocabulary you need before [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md) makes sense.
+That is stream processing. This lesson is an introduction — we'll get into the code in [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md). Here — the ideas. What event-time is, how it differs from processing-time, what windowing is, why it is almost always event-time-based, what "late events" means, and why watermark is needed. Plus short notes on KStream/KTable, repartitioning, and stateful operations — vocabulary you need before [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md) makes sense.
 
 ## Two timestamps
 
@@ -44,7 +44,7 @@ The simplest watermark strategy is `max(event-time of seen records) - tolerance`
 
 A subtle point. The watermark is **per-partition**, not global. If we have 6 partitions and one of them stalls (no new records), the topic-wide watermark is stuck — waiting for the slow one. Same logic as HWM in replication: don't advance until the slowest side catches up.
 
-Our code has no watermark — we just accumulate windows in memory indefinitely and print them. This is a simplification for the lesson. In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md) there is no watermark either — word-count does not need one. Fully-fledged systems (Flink, Beam, Kafka Streams 3.x+) compute watermarks automatically.
+Our code has no watermark — we just accumulate windows in memory indefinitely and print them. This is a simplification for the lesson. In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md) there is no watermark either — word-count does not need one. Fully-fledged systems (Flink, Beam, Kafka Streams 3.x+) compute watermarks automatically.
 
 ## KStream vs KTable
 
@@ -56,7 +56,7 @@ Two terms from the Kafka Streams world, worth knowing even if Go has no native S
 
 The difference in plain terms. KStream `purchases` — all purchases across all time. KTable `user-balance` — the user's current balance at this moment. The key is the same (user_id); the meaning is completely different.
 
-Under the hood, KTable is typically a compacted topic plus a local state store (RocksDB or Pebble) that records are projected into. On restart, the store is rebuilt from the compacted topic. In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md) we reproduce this pattern manually: Pebble + changelog topic for word-count.
+Under the hood, KTable is typically a compacted topic plus a local state store (RocksDB or Pebble) that records are projected into. On restart, the store is rebuilt from the compacted topic. In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md) we reproduce this pattern manually: Pebble + changelog topic for word-count.
 
 ## Repartitioning
 
@@ -72,7 +72,7 @@ Stateless — where processing one record does not depend on others. `map`, `fil
 
 Stateful — where you need to remember something between records. `count`, `sum`, `min/max`, `aggregate`, `join`. A state store is required: either on disk (Pebble/RocksDB), or in memory with a changelog topic for durability. Otherwise, any restart means losing accumulated state. In our aggregator, state is two in-memory maps; `kill -9` resets them. Fine for a lesson; not for production.
 
-In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md) we add Pebble and a changelog topic — a working model of stateful processing with state recovery after restart. Without this layer, any stream analytics resets on the first failure.
+In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md) we add Pebble and a changelog topic — a working model of stateful processing with state recovery after restart. Without this layer, any stream analytics resets on the first failure.
 
 ## What the code shows
 
@@ -188,4 +188,4 @@ A few things to take away from this.
 3. **Late events are normal.** A gap of tens of seconds appears instantly with any network instability. Minutes — with offline devices. Hours and days — with retries from a dead-letter queue. Every stream system must explicitly answer "what do we do with late events".
 4. **Watermark is not an exact science.** It is a heuristic. Too short — the window closes early, you lose data. Too long — the window emits late, the dashboard lags. Tune it for your traffic profile.
 
-In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/ru/README.md) we take this and apply it to a stream that actually stores state — word-count on franz-go + Pebble + changelog topic. After restart, state is recovered from the changelog and accumulated counts are not lost. That is already close to real stream processing.
+In [Stream processing in Go (franz-go + Pebble)](../../../07-02-stream-processing-in-go/i18n/en/README.md) we take this and apply it to a stream that actually stores state — word-count on franz-go + Pebble + changelog topic. After restart, state is recovered from the changelog and accumulated counts are not lost. That is already close to real stream processing.

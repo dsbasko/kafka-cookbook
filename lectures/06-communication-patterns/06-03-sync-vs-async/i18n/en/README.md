@@ -64,7 +64,7 @@ The key thing on the sender side — the list of URLs. Where it comes from is a 
 
 ```go
 targets := flag.String("targets", "",
-    "список URL'ов получателей через запятую; если пусто, берётся LISTENER_URLS")
+    "comma-separated list of recipient URLs; if empty, taken from LISTENER_URLS")
 ```
 
 Next — the fan-out itself. Two modes, because the course wants to show both effects: "one slow recipient stalls everyone" (sequential) and "one failure is isolated" (parallel):
@@ -133,7 +133,7 @@ What we got:
 
 1. **Coupling — loose.** The sender knows nothing about recipients. Tomorrow CRM wants to subscribe — they bring up a service with a new group `crm`, the sender won't even know.
 2. **Latency — two hops.** Sender → broker → receiver. This is slower than direct gRPC; on typical sandboxes the difference is in the single-digit milliseconds. For most event-driven scenarios — not a problem.
-3. **Delivery — at-least-once.** The message lives in the log until retention expires. The recipient crashed, restarted, resumed from the committed offset. Replay (re-read everything for the past week) — built in, free. Deduplication — on the recipient side (covered in [Processing guarantees](../../../../03-consumer/03-03-processing-guarantees/i18n/ru/README.md)).
+3. **Delivery — at-least-once.** The message lives in the log until retention expires. The recipient crashed, restarted, resumed from the committed offset. Replay (re-read everything for the past week) — built in, free. Deduplication — on the recipient side (covered in [Processing guarantees](../../../../03-consumer/03-03-processing-guarantees/i18n/en/README.md)).
 4. **Replacing a recipient.** Bring up a new version of analytics with group `analytics-v2`, it reads from earliest and catches up on history. Compare counters, switch downstream consumers to v2. The old version can sit alongside for another week — it doesn't interfere.
 
 The cost is also real. The sender loses visibility into "did the event actually reach the recipient" — it only knows "the broker wrote it". Between "written" and "processed" there can be hours of distance if the recipient falls behind. Eventual consistency. Accept it.
@@ -166,7 +166,7 @@ A short list of things that look tempting but end badly in production.
 
 **gRPC fan-out with five recipients instead of an event bus.** Six months pass, there are now five recipients, redeploying each one is its own drama. Every new internal service is responsible for getting into someone else's config. At some point someone adds a fallback "if URL is unavailable — log and skip". Then silent event loss begins. As soon as you see the URL list in the config growing — that's the signal to migrate to a topic.
 
-**Mixing everything into one RPC.** "Let's make a gRPC API that synchronously handles order creation, also publishes an event to Kafka, and also calls the email service". Three failure points in one operation, three places where transactionality breaks. If you absolutely need "respond immediately and publish" — that's the [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/ru/README.md), not three parallel calls in one handler.
+**Mixing everything into one RPC.** "Let's make a gRPC API that synchronously handles order creation, also publishes an event to Kafka, and also calls the email service". Three failure points in one operation, three places where transactionality breaks. If you absolutely need "respond immediately and publish" — that's the [Outbox pattern](../../../../04-reliability/04-03-outbox-pattern/i18n/en/README.md), not three parallel calls in one handler.
 
 **Kafka "instead of REST" for queries.** An RPC "give me a user profile by id" via a `user-requests` topic and a response `user-responses` topic with a correlation_id — you see this from people who love Kafka more than synchronous APIs. Latency is tolerable, debugging is impossible, observability is zero. Don't do this. Requests — gRPC/HTTP. Kafka — for events that happened.
 
@@ -203,6 +203,6 @@ Experiment separately with adding a new recipient. In the sync variant — start
 
 ## What comes next
 
-In the next lesson ([gRPC + Kafka hybrid](../../../06-04-hybrid-grpc-and-kafka/i18n/ru/README.md)) we take the hybrid — a synchronous gRPC API for writes plus the outbox pattern with Kafka for events. The result is the "sync on write, async on side-effects" architecture that's almost always chosen in production when there are more than two services and real load.
+In the next lesson ([gRPC + Kafka hybrid](../../../06-04-hybrid-grpc-and-kafka/i18n/en/README.md)) we take the hybrid — a synchronous gRPC API for writes plus the outbox pattern with Kafka for events. The result is the "sync on write, async on side-effects" architecture that's almost always chosen in production when there are more than two services and real load.
 
-The [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/ru/README.md) use case rolls out the same thing on a multi-node setup with an integration test and failure recovery — check it if you want to verify that what's built here actually holds under load.
+The [Microservices communication](../../../../09-use-cases/01-microservices-comm/i18n/en/README.md) use case rolls out the same thing on a multi-node setup with an integration test and failure recovery — check it if you want to verify that what's built here actually holds under load.

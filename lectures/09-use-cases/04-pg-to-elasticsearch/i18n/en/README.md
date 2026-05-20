@@ -2,7 +2,7 @@
 
 Declarative ETL for search. On the left — Postgres with a product catalog, articles, and users. On the right — Elasticsearch, where that same data needs to land so full-text search works on it. Nothing custom between them — only Debezium and the Elasticsearch Sink connector. Go code exists in this use case, but it's diagnostic: db-loader and search-tester don't participate in the pipeline; they're convenient for verifying that everything arrived.
 
-This contrasts with [Postgres → ClickHouse with anonymization](../../../03-pg-to-clickhouse/i18n/ru/README.md). There, a Go anonymizer sat between Debezium and the Sink — unavoidable, since PII masking requires logic. Here there's no logic: the Postgres schema maps almost one-to-one onto an ES JSON document, and the format transforms (unwrap the Debezium envelope, extract the key, rename the topic to an index name) are handled by standard Single Message Transforms inside Connect. The main benefit — the pipeline can be built and maintained without a separate service to deploy and monitor.
+This contrasts with [Postgres → ClickHouse with anonymization](../../../03-pg-to-clickhouse/i18n/en/README.md). There, a Go anonymizer sat between Debezium and the Sink — unavoidable, since PII masking requires logic. Here there's no logic: the Postgres schema maps almost one-to-one onto an ES JSON document, and the format transforms (unwrap the Debezium envelope, extract the key, rename the topic to an index name) are handled by standard Single Message Transforms inside Connect. The main benefit — the pipeline can be built and maintained without a separate service to deploy and monitor.
 
 ## What we're building
 
@@ -17,7 +17,7 @@ kafka-connect: Debezium PostgresConnector
 search.public.products / search.public.articles / search.public.users
    │
    │  ExtractNewRecordState (unwrap)
-   │  ExtractField$Key      (id из ключа в _id)
+   │  ExtractField$Key      (id from key into _id)
    │  RegexRouter           (search.public.X → X_v1)
    ▼
 kafka-connect: ES Sink connector (v1)
@@ -26,7 +26,7 @@ kafka-connect: ES Sink connector (v1)
 Elasticsearch (19200) → indices products_v1 / articles_v1 / users_v1
 ```
 
-Compare with [Postgres → ClickHouse with anonymization](../../../03-pg-to-clickhouse/i18n/ru/README.md): the same number of Connect links, just an ES Sink instead of a ClickHouse Sink, plus the SMT chain because ES expects a flat document while Debezium sends a wrapped one. Postgres schema, publication, replication slot, RF — unchanged.
+Compare with [Postgres → ClickHouse with anonymization](../../../03-pg-to-clickhouse/i18n/en/README.md): the same number of Connect links, just an ES Sink instead of a ClickHouse Sink, plus the SMT chain because ES expects a flat document while Debezium sends a wrapped one. Postgres schema, publication, replication slot, RF — unchanged.
 
 ## Why Single Message Transforms here
 
@@ -83,7 +83,7 @@ _, err := tx.Exec(ctx, `
     pid,
     fmt.Sprintf("SKU-%07d", pid),
     fmt.Sprintf("Product %d %s", pid, randomWord()),
-    fmt.Sprintf("Описание товара %d. Подходит для %s. Качество отличное.", pid, ...),
+    fmt.Sprintf("Product %d description. Fits for %s. Excellent quality.", pid, ...),
     categories[int(pid)%len(categories)],
     int64(100+rand.IntN(990_000)),
     rand.IntN(100),
@@ -99,7 +99,7 @@ pgCount, err := countPostgres(ctx, pool, *pgTable)
 esCount, err := countES(ctx, *esURL, *alias)
 
 if pgCount != esCount {
-    fmt.Printf("РАСХОЖДЕНИЕ: %d (PG) vs %d (ES)\n", pgCount, esCount)
+    fmt.Printf("MISMATCH: %d (PG) vs %d (ES)\n", pgCount, esCount)
 }
 
 hits, err := matchQuery(ctx, *esURL, *alias, *matchField, *query)
@@ -207,7 +207,7 @@ The sandbox version is intentionally stripped down. In production the same schem
 
 ES authorization — here `xpack.security.enabled: "false"` because the lesson teaches the pattern, not security setup. In a real cluster, the Sink works via `connection.username`/`connection.password` or an API key. The ES Sink config accepts both without any changes to the SMT chain.
 
-Schema Registry — here Debezium and the Sink communicate via JsonConverter. This is convenient for debugging (open a console and read). Under load, JSON is inefficient, and the chain is typically switched to Avro via SR — both connectors support this, you just need to replace the `*.converter` pairs and bring up SR (it's already in the root sandbox; the [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/ru/README.md) lesson covers it separately).
+Schema Registry — here Debezium and the Sink communicate via JsonConverter. This is convenient for debugging (open a console and read). Under load, JSON is inefficient, and the chain is typically switched to Avro via SR — both connectors support this, you just need to replace the `*.converter` pairs and bring up SR (it's already in the root sandbox; the [Schema Registry](../../../../05-contracts/05-03-schema-registry/i18n/en/README.md) lesson covers it separately).
 
 Multi-tenant indexes — in this lesson `products_v1` is global. If the catalog is split by store/tenant, the usual approach is a `products_<tenant>_v1` template via the same RegexRouter, plus an extended template. The logic stays the same.
 

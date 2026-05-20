@@ -186,4 +186,4 @@ JMX exporter is mentioned as a production alternative but is not brought up in t
 
 Distributed tracing (Jaeger, Tempo) is a different tool entirely. Metrics tell you "what is happening in the cluster", traces tell you "where this specific request is going". In complex gRPC + Kafka systems you will want both, but that is not the subject of this lecture.
 
-Next — [Retention and compaction](../../../08-02-retention-and-compaction/i18n/ru/README.md) in practice.
+Next — [Retention and compaction](../../../08-02-retention-and-compaction/i18n/en/README.md) in practice.

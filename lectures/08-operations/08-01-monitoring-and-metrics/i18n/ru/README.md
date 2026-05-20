@@ -155,8 +155,8 @@ RATE=2000 PAYLOAD_KB=4 CONSUME_DELAY=100ms make run-load
 
 **На уровне продьюсера** (если у тебя свои метрики из приложения):
 
-- `record-error-rate` (franz-go даёт это через hooks). Растёт — посмотри классы ошибок (retriable vs non-retriable).
-- request latency P99. Растёт — проблема либо у брокера, либо в сети.
+- error-rate продьюсера. Готовой метрики с таким именем у franz-go нет (это имя из Java-клиента, `record-error-rate`). Собирают сами через хук `HookProduceRecordUnbuffered` — он на каждую запись отдаёт ошибку её promise'а. Растёт — посмотри классы ошибок (retriable vs non-retriable).
+- request latency P99. Тоже собирается своим кодом — через `HookBrokerWrite` / `HookBrokerRead` (или `HookBrokerE2E` для оценки полного round-trip). Растёт — проблема либо у брокера, либо в сети.
 
 В sandbox-дашборде я сделал минимум — четыре зоны (общая статистика, скорость записи, lag, диск). Больше пока не нужно. Цель — показать, как стек устроен. Reference-дашборд для production собирается отдельно, под конкретные SLO.
 

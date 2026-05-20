@@ -10,7 +10,7 @@ The stack is simple. Kminion works as an exporter — converts the Kafka API int
 
 ```
                  +----------+
-                 |  kminion |  scrape Kafka API → Prom метрики
+                 |  kminion |  scrape Kafka API → Prom metrics
                  |   :8080  |
                  +----+-----+
                       ^
@@ -23,14 +23,14 @@ The stack is simple. Kminion works as an exporter — converts the Kafka API int
                                           |
                                           v
                                   http://localhost:3000
-                                  → дашборд kminion-overview
+                                  → kminion-overview dashboard
 ```
 
 Startup:
 
 ```sh
-make up                # три контейнера встанут разом
-make topic-create      # отдельный топик для нагрузки
+make up                # three containers come up together
+make topic-create      # a separate topic for the load
 make run-load          # producer + slow consumer
 open http://localhost:3000
 ```
@@ -155,8 +155,8 @@ In real operations you don't have time to watch hundreds of graphs. It's more us
 
 **At the producer level** (if you have your own application metrics):
 
-- `record-error-rate` (franz-go exposes this via hooks). If rising — check error classes (retriable vs non-retriable).
-- request latency P99. If rising — the problem is either at the broker or in the network.
+- producer error-rate. franz-go has no ready-made metric under this name (the Java client calls it `record-error-rate`). You build it yourself via the `HookProduceRecordUnbuffered` hook — it fires on each record with the error its promise will be called with. If rising — check error classes (retriable vs non-retriable).
+- request latency P99. Also built from your own code — via `HookBrokerWrite` / `HookBrokerRead` (or `HookBrokerE2E` for a full round-trip estimate). If rising — the problem is either at the broker or in the network.
 
 In the sandbox dashboard I built the minimum — four zones (overall stats, write throughput, lag, disk). Nothing more is needed for now. The goal is to show how the stack is structured. A reference dashboard for production is assembled separately, against specific SLOs.
 

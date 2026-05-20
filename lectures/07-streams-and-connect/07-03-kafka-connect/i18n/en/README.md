@@ -93,7 +93,7 @@ What to pay attention to.
 Three flags together produce "UPSERT by the `id` field from the payload":
 
 1. `insert.mode=upsert` — write mode (alternatives: `insert` and `update`).
-2. `pk.mode=record_value` — where to get the PK: from the record value. Alternatives: `record_key` (PK is in the record key) and `none` (no PK; upsert is then impossible).
+2. `pk.mode=record_value` — where to get the PK: from the record value. Alternatives: `record_key` (PK is in the record key), `kafka` (PK = Kafka coordinates `topic+partition+offset`) and `none` (no PK; upsert is then impossible).
 3. `pk.fields=id` — which fields are treated as the primary key.
 
 If `insert.mode=insert`, a second record with the same id would fail on a duplicate key error. If `pk.mode=none`, upsert does not work at all.

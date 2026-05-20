@@ -93,7 +93,7 @@ curl http://localhost:8083/connectors/lecture-07-03-jdbc-sink-orders/status
 Связка из трёх флагов делает «UPSERT по полю id из payload'а»:
 
 1. `insert.mode=upsert` — режим записи (есть ещё `insert` и `update`).
-2. `pk.mode=record_value` — откуда взять PK: из value записи. Альтернативы — `record_key` (PK в ключе записи) и `none` (без PK, тогда апсёрт невозможен).
+2. `pk.mode=record_value` — откуда взять PK: из value записи. Альтернативы — `record_key` (PK в ключе записи), `kafka` (PK = координаты Kafka `topic+partition+offset`) и `none` (без PK, тогда апсёрт невозможен).
 3. `pk.fields=id` — какие именно поля считать первичным ключом.
 
 Если бы `insert.mode=insert`, второй раз с тем же id sink упал бы по duplicate key. Если `pk.mode=none`, апсёрт не работает в принципе.

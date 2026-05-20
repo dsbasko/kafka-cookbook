@@ -1,6 +1,6 @@
 # 08-03 — Sizing & Tuning
 
-The [Retention and compaction](../../../08-02-retention-and-compaction/i18n/ru/README.md) lesson covered how Kafka splits a log into segments and what retention/compaction does with them afterward. This one is a level up. Not "how retention works" but "what retention I set on this topic and why exactly that". A couple of knobs on a topic decide what happens to your disk and how the cluster behaves during an incident. You want to understand what the operator is choosing.
+The [Retention and compaction](../../../08-02-retention-and-compaction/i18n/en/README.md) lesson covered how Kafka splits a log into segments and what retention/compaction does with them afterward. This one is a level up. The focus shifts from "how retention works" to "what retention I set on this topic and why exactly that". A couple of knobs on a topic decide what happens to your disk and how the cluster behaves during an incident. You want to understand what the operator is choosing.
 
 Start with partitions, then disk, then walk through the top configs, and finally pull it all together into three profiles that the `topic-profiles` program creates directly on the sandbox.
 
@@ -36,7 +36,7 @@ Example estimate. Events at 600 bytes each, 5000/sec, retention 7 days, RF=3, lz
 
 That's total across the cluster, not per node. To get per-node — divide by the node count and verify you have headroom for reassignments (when a broker goes down and its partitions temporarily live on two brokers instead of three — copies need to spread out, and disk must be enough).
 
-Always reserve headroom — at minimum 30%, better 50%. At peaks everything grows: retention ticks a bit longer, compression degrades, failover eats its own budget. A broker disk at 95% is not "five percent left" — it's an imminent incident: writes block, the controller starts complaining, and nobody wants to deal with that at 3 AM.
+Always reserve headroom — at minimum 30%, better 50%. At peaks everything grows: retention ticks a bit longer, compression degrades, failover eats its own budget. A broker disk at 95% means an imminent incident, no matter how much "five percent" sounds like room: writes block, the controller starts complaining, and nobody wants to deal with that at 3 AM.
 
 ## Topic configs that are actually worth tuning
 
@@ -46,7 +46,7 @@ Below are the knobs worth knowing off the top of your head.
 
 ### cleanup.policy
 
-Two policies from [Retention and compaction](../../../08-02-retention-and-compaction/i18n/ru/README.md) — `delete` and `compact`. There's also `compact,delete` (both compact and retention trim old data). The choice is first and foremost the answer to "what lives in this topic". Event stream — `delete`. Per-key state snapshot — `compact`. Snapshot with TTL "delete profiles older than a year even if no tombstone arrived" — `compact,delete`.
+Two policies from [Retention and compaction](../../../08-02-retention-and-compaction/i18n/en/README.md) — `delete` and `compact`. There's also `compact,delete` (both compact and retention trim old data). The choice is first and foremost the answer to "what lives in this topic". Event stream — `delete`. Per-key state snapshot — `compact`. Snapshot with TTL "delete profiles older than a year even if no tombstone arrived" — `compact,delete`.
 
 Mix them up and you'll hit pain. With `compact` on events you lose everything except the latest version per key (and per-key order is useful in itself, for auditing). With `delete` on state, retention trims needed keys and downstream is left without current state.
 
@@ -58,7 +58,7 @@ Setting only one is fine. Setting both is fine too, and sometimes necessary (for
 
 ### segment.ms / segment.bytes
 
-A segment is the file the active piece of a partition writes to. It closes when it hits `segment.bytes` (1 GB default) or by age `segment.ms` (one week default). Retention and compaction only touch closed segments — that was covered in [Retention and compaction](../../../08-02-retention-and-compaction/i18n/ru/README.md).
+A segment is the file the active piece of a partition writes to. It closes when it hits `segment.bytes` (1 GB default) or by age `segment.ms` (one week default). Retention and compaction only touch closed segments — that was covered in [Retention and compaction](../../../08-02-retention-and-compaction/i18n/en/README.md).
 
 The default "1 GB or one week" is good for an average topic. For high-throughput metrics (where you want fast retention) set `segment.ms=10m` — segments close frequently, retention fires close to the declared value. On a compact topic where updates are rare, `segment.ms=1d` is enough. Segments that are too short produce too many small files, metadata, FDs, and indexes; segments that are too long mean the log doesn't shrink and retention "lies".
 
@@ -95,7 +95,7 @@ This flag is usually left at `false`. If enabled — when the leader fails and a
 
 Two strategies. `CreateTime` — Kafka stores the timestamp the producer set. `LogAppendTime` — Kafka sets its own timestamp at broker append time, overwriting what the client sent.
 
-`CreateTime` is needed when event-time matters for downstream — for example, for windowing in [Stream processing: concepts](../../../../07-streams-and-connect/07-01-stream-processing-concepts/i18n/ru/README.md). `LogAppendTime` — when you don't trust client clocks and retention predictability matters more than event-time. For metrics with an aggressive TTL, `LogAppendTime` is more stable: retention cuts by "broker time", not by whatever a producer with a drifted clock reports.
+`CreateTime` is needed when event-time matters for downstream — for example, for windowing in [Stream processing: concepts](../../../../07-streams-and-connect/07-01-stream-processing-concepts/i18n/en/README.md). `LogAppendTime` — when you don't trust client clocks and retention predictability matters more than event-time. For metrics with an aggressive TTL, `LogAppendTime` is more stable: retention cuts by "broker time", not by whatever a producer with a drifted clock reports.
 
 ## Three profiles
 
@@ -135,7 +135,7 @@ The profiles are hardcoded — the `profiles(prefix)` list. Here's what the `cdc
         "unclean.leader.election.enable": kadm.StringPtr("false"),
         "message.timestamp.type":         kadm.StringPtr("CreateTime"),
     },
-    rationale: "long-lived state по ключу: compact + retention=-1 + zstd, ...",
+    rationale: "long-lived per-key state: compact + retention=-1 + zstd, ...",
 },
 ```
 
@@ -213,4 +213,4 @@ In the `make run` output, three things are worth watching. The `CDC` column — 
 | Audit | 3–6 | delete | 1y | 7d | zstd | CreateTime |
 | Cache (key→value) | 6 | compact,delete | 90d | 1d | lz4 | CreateTime |
 
-These are not "correct" numbers — they're working starting points. From here you tune to your own traffic profile and watch disk via `DescribeAllLogDirs` and lag via `kadm.Lag`.
+Treat these as working starting points rather than "correct" numbers. From here you tune to your own traffic profile and watch disk via `DescribeAllLogDirs` and lag via `kadm.Lag`.

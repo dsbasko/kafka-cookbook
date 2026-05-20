@@ -18,7 +18,7 @@
     "publication.autocreate.mode": "disabled",
     "slot.name": "lecture_07_04_outbox_slot",
 
-    "snapshot.mode": "never",
+    "snapshot.mode": "no_data",
 
     "transforms": "outbox",
     "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",

@@ -21,7 +21,7 @@ The fourth point is the final form of the outbox, and in this lecture we assembl
 
 There are several layers here. Let's go through them in order.
 
-Postgres WAL is written in physical format. It's not "INSERT INTO users VALUES (...)" — it's a byte representation of page changes on disk, nearly useless from the outside. To extract logical changes from it, Postgres since version 10 supports "logical replication" — a decoder that sits on top of WAL and converts physical records into logical events (INSERT/UPDATE/DELETE with column sets).
+Postgres WAL is written in physical format — a byte representation of page changes on disk, without SQL statements like "INSERT INTO users VALUES (...)". Such a stream is nearly useless from the outside. To extract logical changes from it, Postgres since version 10 supports "logical replication" — a decoder that sits on top of WAL and converts physical records into logical events (INSERT/UPDATE/DELETE with column sets).
 
 The decoder is selected via the `plugin.name` parameter. The built-in baseline is `pgoutput`. Previously you had to install `wal2json`, but Debezium since 2.0 supports pgoutput out of the box, and plugin installation is no longer needed.
 
@@ -74,7 +74,7 @@ When the connector starts for the first time with `snapshot.mode=initial`, it do
 
 This gives a consistent picture: subscribe — first dump the entire current database into Kafka, then stream incremental changes. No gaps, no races.
 
-`snapshot.mode` has multiple options — `initial` (our default), `never` (only new changes, no historical data), `initial_only` (snapshot and stop), `when_needed`. For analytics, typically `initial`. For the outbox table — `never`, historical outbox is usually not needed.
+`snapshot.mode` has multiple options — `initial` (our default), `no_data` (only new changes, no historical data; in Debezium 2.x this mode was called `never`), `initial_only` (snapshot and stop), `when_needed`. For analytics, typically `initial`. For the outbox table — `no_data`, historical outbox is usually not needed.
 
 ## Outbox event router
 

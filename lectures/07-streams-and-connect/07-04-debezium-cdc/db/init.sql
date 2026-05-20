@@ -35,9 +35,9 @@ ALTER TABLE outbox REPLICA IDENTITY FULL;
 -- Publication — это объект Postgres'а, через который logical replication
 -- решает, какие изменения отдавать подписчикам. Debezium в connector-конфиге
 -- выставляет publication.name=dbz_publication и publication.autocreate.mode=
--- filtered. С filtered Debezium создаёт publication сам, ограничивая её
--- table.include.list. Создаём руками заранее — это и контроль, и наглядность:
--- видно, какие таблицы реально стримятся.
+-- disabled. С disabled Debezium ничего сам не создаёт и требует, чтобы
+-- publication уже существовала — поэтому создаём её руками тут. Это и
+-- контроль, и наглядность: видно, какие таблицы реально стримятся.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'dbz_publication') THEN

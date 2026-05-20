@@ -47,7 +47,7 @@
 }
 
 .markdown p {
-  margin: 0;
+  margin: 0 0 20px 0;
   text-wrap: pretty;
 }
 
@@ -74,7 +74,7 @@
 .markdown ul,
 .markdown ol {
   padding-left: var(--space-6);
-  margin: 0;
+  margin: 0 0 20px 0;
 }
 
 .markdown ol {
@@ -119,7 +119,7 @@
 }
 
 .markdown li + li {
-  margin-top: var(--space-2);
+  /* margin-top: var(--space-2); */
 }
 
 .markdown li > p {
@@ -157,9 +157,11 @@
 .markdown table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--font-size-sm);
+  font-family: inherit;
+  font-size: 0.875em;
   display: block;
   overflow-x: auto;
+  margin: 0 0 20px 0;
 }
 
 .markdown th,

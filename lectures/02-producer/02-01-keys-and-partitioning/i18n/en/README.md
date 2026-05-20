@@ -233,7 +233,7 @@ After this lecture, the following should be clear:
 - Changing the partition count is painful. Decrease — impossible. Increase breaks ordering for re-mapped keys. Plan upfront.
 - A custom partitioner is two methods (`Partition`, `RequiresConsistency`) plus `ForTopic`. Use it when the default "spread evenly across all partitions" does not fit the business case — for example, when you need to isolate the premium stream in a dedicated partition and consume it separately from the general backlog.
 
-The next lecture ([Acks and durability](../../../02-02-acks-and-durability/i18n/ru/README.md)) covers `acks` and durability. Again one tiny option that determines whether you lose data when a broker goes down.
+The next lecture ([Acks and durability](../../../02-02-acks-and-durability/i18n/en/README.md)) covers `acks` and durability. Again one tiny option that determines whether you lose data when a broker goes down.
 
 ## Running
 

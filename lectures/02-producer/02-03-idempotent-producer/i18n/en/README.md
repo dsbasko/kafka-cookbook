@@ -1,6 +1,6 @@
 # 02-03 — Idempotent Producer
 
-In [Acks and durability](../../../02-02-acks-and-durability/i18n/ru/README.md) we briefly mentioned that franz-go is an idempotent producer with `acks=all` by default. Here we'll break down what that means, what it protects against — and what it doesn't. Most importantly, we'll watch the difference play out: same code, flip a flag, behavior changes.
+In [Acks and durability](../../../02-02-acks-and-durability/i18n/en/README.md) we briefly mentioned that franz-go is an idempotent producer with `acks=all` by default. Here we'll break down what that means, what it protects against — and what it doesn't. Most importantly, we'll watch the difference play out: same code, flip a flag, behavior changes.
 
 The idempotent producer arrived in Kafka 0.11 precisely because without it any reliable producer in production collected duplicates. Duplicates surfaced from the nature of networking — application bugs are secondary here. The scenario is painfully simple.
 
@@ -44,7 +44,7 @@ What this means in practice. A producer started, managed to send a record (PID=4
 
 The zombie scenario is a separate story, exactly about this. The old producer process hung — long GC pause, network loss, swap thrash, anything. The process didn't crash, the OS didn't kill it. A new process with the same logical role started — got its own PID. The old one "wakes up" with a batch in flight and delivers it. The broker accepts: the PIDs are different, to it these are two independent producers. Both copies land in the log.
 
-Idempotency alone can't fix this. Protection from zombies is **transactional.id** + producer-epoch fencing, the subject of the next module ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/ru/README.md)). Idempotency protects against duplicates **within** a single producer session, not between sessions.
+Idempotency alone can't fix this. Protection from zombies is **transactional.id** + producer-epoch fencing, the subject of the next module ([Transactions and EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md)). Idempotency protects against duplicates **within** a single producer session, not between sessions.
 
 Remember this boundary. It's a common source of confusion.
 
@@ -180,7 +180,7 @@ Raise `drop-rate` high enough (e.g. 0.6) and some records start hitting `RecordD
 - `max.in.flight.requests.per.connection` idempotent mode keeps at ≤ 5 on its own. Batch reordering in the log due to async retries is impossible.
 - The cost of enabling it is near zero on a healthy cluster. A little metadata in the batch, one extra RPC on startup (`InitProducerId`). After that — the same data flow.
 
-In [Batching and throughput](../../../02-04-batching-and-throughput/i18n/ru/README.md) we'll cover batching and compression — and from there understand why `max.in.flight ≤ 5` barely affects throughput.
+In [Batching and throughput](../../../02-04-batching-and-throughput/i18n/en/README.md) we'll cover batching and compression — and from there understand why `max.in.flight ≤ 5` barely affects throughput.
 
 ## Running
 

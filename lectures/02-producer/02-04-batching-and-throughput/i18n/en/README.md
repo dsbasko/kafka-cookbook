@@ -1,6 +1,6 @@
 # 02-04 — Batching & Throughput
 
-In [Acks and durability](../../../02-02-acks-and-durability/i18n/ru/README.md) we measured latency on honest round-trips via ProduceSync — one record at a time, one in flight at a time. That was a demo about acks, not speed. Here we take the other side of the coin — throughput. What actually gives a producer speed, how to use batching, and where it starts to get in the way.
+In [Acks and durability](../../../02-02-acks-and-durability/i18n/en/README.md) we measured latency on honest round-trips via ProduceSync — one record at a time, one in flight at a time. That was a demo about acks, not speed. Here we take the other side of the coin — throughput. What actually gives a producer speed, how to use batching, and where it starts to get in the way.
 
 Spoiler up front: Kafka producer throughput is about batch size, not message size. Thicker batches mean fewer round-trips per unit of payload. Compression tags along — it works at the batch level, and without batching it does almost nothing.
 
@@ -67,7 +67,7 @@ One binary: `cmd/bench`. It runs a matrix of three linger values (0/5/50 ms) and
 
 Each combination writes to its own topic — otherwise disk sizes mix and the compression column loses meaning. Topic names: `lecture-02-04-batching-l<linger>-<codec>`.
 
-Writes are fundamentally async — `cl.Produce` plus a callback. If we used ProduceSync (as in [Acks and durability](../../../02-02-acks-and-durability/i18n/ru/README.md)), batch effects would disappear: the next record doesn't leave until the previous one finishes the round-trip.
+Writes are fundamentally async — `cl.Produce` plus a callback. If we used ProduceSync (as in [Acks and durability](../../../02-02-acks-and-durability/i18n/en/README.md)), batch effects would disappear: the next record doesn't leave until the previous one finishes the round-trip.
 
 The loop is just `cl.Produce` in a loop, with time measured up to the callback:
 
@@ -89,7 +89,7 @@ res.elapsed = time.Since(start)
 
 Two subtleties here. First — `Flush` is mandatory. Without it the loop finishes instantly (we handed 100k records to the buffer queue in milliseconds), and elapsed is fake. Second — the latency we record in the callback is **not** a round-trip to the broker. It is the full journey of a record: "put in queue" → "landed in a batch" → "batch sent" → "broker replied" → "callback fired." Under heavy load the first records in the queue have enormous latency — they wait for all the batches ahead of them to clear. The last ones have small latency. P50 across 100k is roughly the average step across the whole run, not "time of a single RPC."
 
-That's fine for our comparison — we compare scenarios against each other under identical load. For honest per-record latency at low load, that's a different experiment (and it was done in [Acks and durability](../../../02-02-acks-and-durability/i18n/ru/README.md) with ProduceSync).
+That's fine for our comparison — we compare scenarios against each other under identical load. For honest per-record latency at low load, that's a different experiment (and it was done in [Acks and durability](../../../02-02-acks-and-durability/i18n/en/README.md) with ProduceSync).
 
 Disk size is calculated via `kadm.DescribeAllLogDirs`:
 
@@ -170,7 +170,7 @@ The boundary is somewhere around 200–300 bytes. Below that — either batch mu
 - `MaxBufferedRecords` is the limit at which `Produce` blocks. The default of 10,000 needs to be raised under real load; otherwise backpressure hits the buffer before the broker.
 - When sizing partitions, look at write rate into a single partition, not the topic. Too many partitions with low throughput = thin batches = poor compression ratio.
 
-In [Errors, retries, and headers](../../../02-05-errors-retries-headers/i18n/ru/README.md) we'll cover producer error classes, retry/timeout settings, and headers — the last piece that completes the producer picture.
+In [Errors, retries, and headers](../../../02-05-errors-retries-headers/i18n/en/README.md) we'll cover producer error classes, retry/timeout settings, and headers — the last piece that completes the producer picture.
 
 ## Running
 

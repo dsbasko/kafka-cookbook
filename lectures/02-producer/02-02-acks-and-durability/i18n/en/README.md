@@ -1,6 +1,6 @@
 # 02-02 — Acks & Durability
 
-In the previous lesson ([Keys and partitioning](../../../02-01-keys-and-partitioning/i18n/ru/README.md)) the key determined **where** a record lands. Now we cover a different small option — `acks`. It answers a completely different question: **when** the producer considers a record written. The answer determines whether you lose data when a broker goes down.
+In the previous lesson ([Keys and partitioning](../../../02-01-keys-and-partitioning/i18n/en/README.md)) the key determined **where** a record lands. Now we cover a different small option — `acks`. It answers a completely different question: **when** the producer considers a record written. The answer determines whether you lose data when a broker goes down.
 
 The option looks simple. Three values, a number. Behind that number sits a different consistency model and a different durability ceiling. Mix it up and you'll find out either in your first serious incident or in a postmortem review for a neighboring team.
 
@@ -50,7 +50,7 @@ Short rule: `acks=all` plus `min.insync.replicas >= 2` plus RF=3 — that is the
 
 There is an important detail about franz-go (and the Java client too). By default the producer is **idempotent** — it can deduplicate retries. Idempotency requires `acks=all`. If you set `acks=0` or `acks=1`, explicitly disable idempotency with `kgo.DisableIdempotentWrite()`. Otherwise the client will error on initialization with `idempotency requires acks=all`.
 
-More on the idempotent producer in the next lesson ([Idempotent producer](../../../02-03-idempotent-producer/i18n/ru/README.md)). For now, remember: franz-go default = idempotent producer with acks=all. To lower acks, you must also disable idempotency.
+More on the idempotent producer in the next lesson ([Idempotent producer](../../../02-03-idempotent-producer/i18n/en/README.md)). For now, remember: franz-go default = idempotent producer with acks=all. To lower acks, you must also disable idempotency.
 
 ## What the code does
 
@@ -127,7 +127,7 @@ acks=all  1000  0       1.22s     819 msg/s    753.0µs  2.70ms  14.36ms  268.45
 
 What matters. P50 for `acks=0` is tens of microseconds. That is just the time to hand the packet to the kernel socket — no broker round-trip at all. For `acks=1` it is already milliseconds — the leader wrote and responded. For `acks=all` slightly more — the leader additionally waited for ISR followers. The difference between `acks=1` and `acks=all` is usually small on a healthy cluster with a fast network — 30–50% overhead. On a slow network or under loaded followers the gap widens sharply.
 
-Throughput is inverse: 23k/1.4k/0.8k msg/s. The numbers look frighteningly low, but we are synchronous — no batching, no parallelism. With a normal async producer and a linger — a different story; in [Batching and throughput](../../../02-04-batching-and-throughput/i18n/ru/README.md) we measure throughput specifically.
+Throughput is inverse: 23k/1.4k/0.8k msg/s. The numbers look frighteningly low, but we are synchronous — no batching, no parallelism. With a normal async producer and a linger — a different story; in [Batching and throughput](../../../02-04-batching-and-throughput/i18n/en/README.md) we measure throughput specifically.
 
 The `MAX` column is a separate story. Hundreds of milliseconds can appear there sometimes (268ms for `acks=all` in my run). This is typical: the first write to a topic after client startup triggers a metadata refresh, leader lookups, and connection opening to the relevant brokers. So `MAX` is most likely the first record, not representative latency. P99/P99.9 show the real tail.
 
@@ -165,9 +165,9 @@ After this lesson these points should be clear:
 - `acks=1` — a trade-off that is tempting on latency but allows silent loss when the leader crashes. In my experience — almost always a bad choice. If you genuinely need latency savings, it is usually better to tune batching and compression with `acks=all` than to lower durability.
 - `acks=all` does nothing on its own. It works together with RF≥2 and `min.insync.replicas≥2`. Without these, `acks=all` can silently become `acks=1` when the ISR shrinks.
 - When `min.insync.replicas` is stricter than the current ISR, the producer sees an error. This is a **feature**, not a bug — better to not write than to write to a single replica and lose it.
-- Idempotency in franz-go is enabled by default and requires `acks=all`. To lower acks — `kgo.DisableIdempotentWrite()`. Idempotency itself is the topic of the next lesson ([Idempotent producer](../../../02-03-idempotent-producer/i18n/ru/README.md)).
+- Idempotency in franz-go is enabled by default and requires `acks=all`. To lower acks — `kgo.DisableIdempotentWrite()`. Idempotency itself is the topic of the next lesson ([Idempotent producer](../../../02-03-idempotent-producer/i18n/en/README.md)).
 
-In [Idempotent producer](../../../02-03-idempotent-producer/i18n/ru/README.md) we cover what the idempotent producer actually does — why it protects against duplicates on retries and why it does **not** protect against the zombie scenario between sessions.
+In [Idempotent producer](../../../02-03-idempotent-producer/i18n/en/README.md) we cover what the idempotent producer actually does — why it protects against duplicates on retries and why it does **not** protect against the zombie scenario between sessions.
 
 ## Running
 

@@ -70,7 +70,6 @@ func restore(ctx context.Context, store *pebble.DB, topic string) error {
 	cl, err := kafka.NewClient(
 		kgo.ConsumeTopics(topic),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
-		kgo.DisableAutoCommit(),
 	)
 	if err != nil {
 		return err

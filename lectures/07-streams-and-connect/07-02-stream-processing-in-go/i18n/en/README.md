@@ -1,6 +1,6 @@
 # 07-02 — Stream Processing in Go (franz-go + Pebble)
 
-In [Stream processing: concepts](../../../07-01-stream-processing-concepts/i18n/ru/README.md) we talked about ideas: event-time, windows, watermark, KStream/KTable. Time to get hands-on. Stream processing needs state — counters live somewhere between records. And that state must survive restarts, otherwise any analytics falls apart on the first `kill -9`.
+In [Stream processing: concepts](../../../07-01-stream-processing-concepts/i18n/en/README.md) we talked about ideas: event-time, windows, watermark, KStream/KTable. Time to get hands-on. Stream processing needs state — counters live somewhere between records. And that state must survive restarts, otherwise any analytics falls apart on the first `kill -9`.
 
 The problem: there is no native Kafka Streams for Go. In Java — there is a library, straight from Confluent. In Go — nothing. The closest things (Watermill, for example) are about message routing, not stateful streams. So we build by hand: a Kafka client + a local embedded KV store + a changelog topic for durability.
 
@@ -16,11 +16,11 @@ Stateful is different. We compute `count`, `sum`, `top-N`, `unique users per hou
 2. **External DB.** Postgres, Redis, any KV. Overhead on every increment — a network round-trip. At 50k msg/sec on the stream that already hurts.
 3. **Embedded store + changelog.** Write to a local LSM (Pebble/RocksDB), simultaneously send a copy of changes to a compacted Kafka topic. Performance like a local DB (millisecond network round-trips disappear), durability at Kafka level. This is exactly "what Kafka Streams does".
 
-We build the third option. Pebble here — because it is pure Go, no CGo (RocksDB via CGo is its own build-time pain). Pebble is used in production by CockroachDB, a significant part of their LSM stack is built on it — more than enough for our sandbox.
+We build the third option. Pebble here — because it is pure Go, no CGo (RocksDB via CGo is its own build-time pain). Pebble is CockroachDB's own LSM engine, the foundation of their storage layer — more than enough for our sandbox.
 
 ## Pebble in brief
 
-LSM tree, embedded, key-value. The API is very simple: `Set`, `Get`, `Delete`, iteration. Writes to disk (by default to the specified directory), flushes periodically. By design — a relative of RocksDB.
+LSM tree, embedded, key-value. The API is very simple: `Set`, `Get`, `Delete`, iteration. Writes to disk (by default to the specified directory), flushes the memtable to disk periodically. By design — a relative of RocksDB.
 
 What matters to us from the API:
 
@@ -30,7 +30,7 @@ What matters to us from the API:
 - `db.NewIter(opts)` → iterator over the full range.
 - `db.Flush()` — force the memtable to disk.
 
-The `pebble.Sync` vs `pebble.NoSync` option controls fsync. For our purposes `Sync` on every Set is paranoid — for the lesson it is fine, the effect of "power off, counter not lost" is visible (if we were actually verifying that). In production, combined with a changelog, teams often use `NoSync` plus a periodic `Flush`: durability is provided by Kafka, the local disk is only needed for speed.
+The `pebble.Sync` vs `pebble.NoSync` option controls fsync. In our code we collect all of a polling round's `Set`s into a `*pebble.Batch` without sync, then commit the batch with `pebble.Sync` — one fsync per batch instead of one per record. In production, combined with a changelog, teams often use `NoSync` even on batch commit plus a periodic `Flush`: durability is provided by Kafka, the local disk is only needed for speed.
 
 ## Architecture of our word-count
 
@@ -58,56 +58,61 @@ word-count-changelog ──> [changelog-restorer] ──> ./state/
 
 ## The word-count loop
 
-The most important thing — the order of operations between Pebble, the changelog, and the offset commit. Swap them and you either lose increments on a crash, or get duplicates on restart.
+The most important thing — the order of three durable writes in one polling round: the changelog produce, the Pebble batch, and the offset commit. Swap them and you either lose increments on a crash, or get duplicates on restart.
 
-Correct order: **Pebble first, then changelog, then offset commit**. Each step has a reason.
+Correct order: **changelog → Pebble → offset commit**. Each step has a reason.
 
-First, the increment itself:
-
-```go
-func (w *wordCounter) incrementWord(word string) (uint64, error) {
-    current, err := readUint64(w.store, []byte(word))
-    if err != nil {
-        return 0, err
-    }
-    current++
-    if err := w.store.Set([]byte(word), encodeUint64(current), pebble.Sync); err != nil {
-        return 0, fmt.Errorf("pebble set: %w", err)
-    }
-    return current, nil
-}
-```
-
-One polling loop — one batch of records being processed:
+First, accumulate increments in an in-memory overlay (no Pebble writes yet) and build the matching changelog records:
 
 ```go
+overlay := make(map[string]uint64)
+var produces []*kgo.Record
+
 fetches.EachRecord(func(rec *kgo.Record) {
     words := tokenize(string(rec.Value))
     for _, word := range words {
-        newCount, err := w.incrementWord(word)
-        if err != nil { /* лог и продолжаем */ }
+        cur, ok := overlay[word]
+        if !ok {
+            cur, _ = readUint64(w.store, []byte(word))
+        }
+        cur++
+        overlay[word] = cur
         produces = append(produces, &kgo.Record{
             Topic: w.changelogTopic,
             Key:   []byte(word),
-            Value: encodeUint64(newCount),
+            Value: encodeUint64(cur),
         })
     }
 })
 ```
 
-After Pebble is updated and the changelog records are accumulated — publish them in one `ProduceSync` and only then commit the offset:
+The overlay matters: within one batch the same word can appear several times, and we need every produce to carry the running counter, not the stale Pebble value.
+
+Then publish the changelog in one `ProduceSync`, persist the overlay to Pebble in one batch, and only after that commit the offsets:
 
 ```go
-err := w.client.ProduceSync(rpcCtx, produces...).FirstErr()
-// ... проверка ошибки ...
-err = w.client.CommitUncommittedOffsets(commitCtx)
+if err := w.client.ProduceSync(rpcCtx, produces...).FirstErr(); err != nil {
+    return fmt.Errorf("changelog produce: %w", err)
+}
+
+batch := w.store.NewBatch()
+for word, count := range overlay {
+    _ = batch.Set([]byte(word), encodeUint64(count), nil)
+}
+if err := batch.Commit(pebble.Sync); err != nil {
+    return fmt.Errorf("pebble batch commit: %w", err)
+}
+
+if err := w.client.CommitUncommittedOffsets(commitCtx); err != nil {
+    return fmt.Errorf("commit offsets: %w", err)
+}
 ```
 
-Why this order. If we committed offsets first and then wrote the changelog — and were killed in that gap — after restart word-count would consider that batch successfully processed, but there are no changes in the Kafka changelog. If we then lose Pebble and try to restore — counters will come back lower. Worst of all, this loss is silent.
+Why this order. If we committed offsets first and then wrote the changelog — and were killed in that gap — after restart word-count would consider that batch processed, but the changelog has no record of it. Then if we lose Pebble and try to restore — counters come back lower. The loss is silent: nobody alerts you on a counter that quietly underreports.
 
-Alternatively: commit first, then changelog. If a crash occurs between them — a duplicate processing in Pebble (restart will re-read the uncommitted batch), but the changelog is intact. Also bad: the counter ends up one higher than it should be.
+Why changelog before Pebble. If a crash hits between them, the changelog has the new values and Pebble has the old ones. On restart, the offset has not been committed, so reprocessing the same input batch produces the same new values, the changelog gets duplicate writes for the same keys (compaction collapses them later), and Pebble catches up. End state is consistent. If we had written Pebble first and crashed before the changelog, restorer from changelog would yield older values than Pebble — and Pebble itself would re-increment on replay because the overlay starts from whatever Pebble already has, inflating the counter by one batch.
 
-The correct order (Pebble → changelog → commit) gives **at-least-once** end-to-end. After restart we may reprocess the last batch (Pebble will increment again for the same words), but the changelog also gets both writes — restore from it will produce the same inflated value. It is self-consistent. To achieve exactly-once you need a transactional producer plus `SendOffsetsToTransaction` (that is the [Consume-process-produce](../../../../04-reliability/04-02-consume-process-produce/i18n/ru/README.md) lesson), but for word-count a difference of one or two increments after a rare crash is an acceptable price.
+The whole pipeline still gives **at-least-once**, not exactly-once. A crash after Pebble commit but before offset commit will reprocess the batch on restart — Pebble re-increments because the overlay sees the already-updated values, and the changelog gets the inflated counts. To eliminate that, you need transactional producer semantics around the whole block: `kgo.NewGroupTransactSession` plus `Begin/End(TryCommit)` — see [Consume-process-produce](../../../../04-reliability/04-02-consume-process-produce/i18n/en/README.md). For our word-count, an inflation of one or two on a rare crash is an acceptable trade.
 
 ## Output: top-N snapshot
 
@@ -116,12 +121,12 @@ Every `flush` seconds a background goroutine walks Pebble and emits the current 
 ```go
 func (w *wordCounter) flushTopN(ctx context.Context) error {
     rows, err := w.collectAll()
-    // ... сортировка по count убыванию ...
+    // ... sort rows by count descending ...
     if len(rows) > w.topN {
         rows = rows[:w.topN]
     }
-    // печать в stdout
-    // ProduceSync top-N в outputTopic
+    // print to stdout
+    // ProduceSync top-N to outputTopic
 }
 ```
 
@@ -172,7 +177,7 @@ fetches.EachRecord(func(rec *kgo.Record) {
         maxOffsets[rec.Partition] = rec.Offset + 1
     }
     if len(rec.Value) == 0 {
-        // tombstone — ключа больше нет
+        // tombstone — key no longer exists
         _ = store.Delete(rec.Key, pebble.NoSync)
         return
     }
@@ -237,20 +242,20 @@ rm -rf ./state
 
 What we built is a stateful processing model at minimum viable complexity. Many things are missing, and it is useful to know that each of them is absent here.
 
-- **Time windows.** Word-count does not need event-time — it counts "everything over all time." Real streams almost always want windows (see [Stream processing: concepts](../../../07-01-stream-processing-concepts/i18n/ru/README.md)). On top of our scheme this looks like: the Pebble key is not `word` but `<word>:<window-start>`, plus a separate process closes windows by watermark and deletes old keys.
+- **Time windows.** Word-count does not need event-time — it counts "everything over all time." Real streams almost always want windows (see [Stream processing: concepts](../../../07-01-stream-processing-concepts/i18n/en/README.md)). On top of our scheme this looks like: the Pebble key is not `word` but `<word>:<window-start>`, plus a separate process closes windows by watermark and deletes old keys.
 - **Joins.** Stream-stream and stream-table joins are a large separate topic. Briefly: both sides need to be repartitioned by the join key, then a local cache (KTable-side) must be held in Pebble.
-- **Backpressure.** In our code `flushLoop` runs independently of processing. If the incoming message rate greatly exceeds the flush rate to Kafka — the buffer grows. For production: `cl.PauseFetchPartitions` on outputTopic overload (pattern from [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/ru/README.md)).
-- **Exactly-once.** To eliminate duplicates on crashes, you need producer transactions wrapping the "Pebble update + changelog produce + offset commit" block. That is `kgo.TransactionalID(...)` plus `kgo.SendOffsetsToTransaction` — the pattern from [Consume-process-produce](../../../../04-reliability/04-02-consume-process-produce/i18n/ru/README.md).
+- **Backpressure.** In our code `flushLoop` runs independently of processing. If the incoming message rate greatly exceeds the flush rate to Kafka — the buffer grows. For production: `cl.PauseFetchPartitions` on outputTopic overload (pattern from [Delivery to external systems](../../../../04-reliability/04-05-external-delivery/i18n/en/README.md)).
+- **Exactly-once.** To eliminate duplicates on crashes, you need producer transactions wrapping the "changelog produce + Pebble update + offset commit" block. In franz-go v1.21.0 the public entry point is `kgo.NewGroupTransactSession` — see [Consume-process-produce](../../../../04-reliability/04-02-consume-process-produce/i18n/en/README.md).
 - **State sharding.** With a large number of input partitions, a single node with a single Pebble is a bottleneck. Kafka Streams splits state by key partition; each node holds its own shard. Here — one process, one state. Scales via consumer group: each member takes its partitions and holds its own Pebble; the changelog is still shared.
-- **Metrics and observability.** Input topic lag, state size, changelog-publish lag, top-N flush latency. That is [Monitoring and metrics](../../../../08-operations/08-01-monitoring-and-metrics/i18n/ru/README.md).
+- **Metrics and observability.** Input topic lag, state size, changelog-publish lag, top-N flush latency. That is [Monitoring and metrics](../../../../08-operations/08-01-monitoring-and-metrics/i18n/en/README.md).
 
-Everything listed is built on the same foundation. Pebble + changelog + the correct order of "state → log → commit." The surrounding machinery changes, not the essence.
+Everything listed is built on the same foundation. Pebble + changelog + the correct order of "changelog → state → commit." The surrounding machinery changes, not the essence.
 
 ## Key takeaways
 
 - **Stateful streams without a state store are an illusion.** In-memory works until it crashes; you need either external storage (slow) or embedded + changelog (faster and durable).
 - **Pebble + compacted changelog topic — a working scheme for Go.** Not Kafka Streams, but sufficient for most practical tasks.
-- **Operation order matters more than it seems.** State → log → commit. Any reordering produces bad semantics (lost or inconsistent counter), and you will notice that in production long after the first incident.
+- **Operation order matters more than it seems.** Changelog → state → commit. Any reordering produces bad semantics (lost or inconsistent counter), and you will notice that in production long after the first incident.
 - **A compacted topic is a materialized snapshot, not a log.** All reasoning about retention does not apply to it; size is bounded by the number of unique keys, not the number of records.
 
-In [Kafka Connect](../../../07-03-kafka-connect/i18n/ru/README.md) we go in a different direction — Kafka Connect and declarative ETL without custom code. For cases where Pebble + Go is overkill.
+In [Kafka Connect](../../../07-03-kafka-connect/i18n/en/README.md) we go in a different direction — Kafka Connect and declarative ETL without custom code. For cases where Pebble + Go is overkill.

@@ -90,17 +90,17 @@ Action. Composite key — `cmd/composite-key-fix`. Take the former hot key and a
 
 Symptom. You ran `kafka-reassign-partitions.sh --execute`, and `--verify` hangs on `... still in progress`. For hours. UR partitions won't clear.
 
-Diagnosis. What's replicating slowly? `kafka-replica-verification.sh` or comparing fetch metrics. Most often the problem is `replication.throttled.replicas` set too low — replication is throttled to 10 MB/sec but you need to move terabytes.
+Diagnosis. What's replicating slowly? Compare fetch metrics per-partition or run `kafka-replica-verification.sh` (marked deprecated in 4.x, but still works). Most often the problem is the throttle set at `--execute` time: 10 MB/sec, but you need to move terabytes. The throttle lives in the broker-level configs `leader.replication.throttled.rate` / `follower.replication.throttled.rate` (bytes/sec) and the topic-level lists `leader.replication.throttled.replicas` / `follower.replication.throttled.replicas`. Don't confuse with `replica.alter.log.dirs.io.max.bytes.per.second` — that one governs JBOD movement between log dirs on the same broker, unrelated to cross-broker reassignment.
 
-Action. Raise `replica.alter.log.dirs.io.max.bytes.per.second` (or the broker equivalent). Check for background tasks eating disk (compaction, large segment rotation). If the move is progressing normally but the topic is huge — it just takes time; the JSON plan has a progress metric.
+Action. Raise the throttle via `kafka-reassign-partitions.sh --additional --throttle <bytes-per-sec>` (it rewrites `leader.replication.throttled.rate` / `follower.replication.throttled.rate` atomically). Check for background tasks eating disk (compaction, large segment rotation). If the move is progressing normally but the topic is huge — it just takes time; the JSON plan has a progress metric.
 
 ## 10. Topic deletion stuck
 
-Symptom. `kafka-topics.sh --delete --topic foo` completed, but the topic shows up in `--list` with the `_marked_for_deletion` tag. Files on disk aren't being removed.
+Symptom. `kafka-topics.sh --delete --topic foo` returned without an error, but the topic still appears in `--list`, and segment files in the broker data dir (`/var/lib/kafka/data/foo-*`) remain. (The old `_marked_for_deletion` tag was a ZooKeeper-era output — in KRaft mode it's gone; the topic is either there or it isn't.)
 
-Diagnosis. The broker has `delete.topic.enable` disabled (it defaults to `true` on newer versions, but check). Or — the broker holding that replica is down, and until it comes back, the controller can't finish the delete.
+Diagnosis. The broker has `delete.topic.enable=false` (it defaults to `true`, but check). Or — the active controller is unreachable (see block 6) and DDL is hanging. Or — one of the brokers holding a replica is down, and until it acknowledges segment deletion, the operation won't finish.
 
-Action. Verify `delete.topic.enable=true` on all brokers. Bring the failed node back up. If completely stuck (old bug, very rare) — restart the controller node. Barely encountered on recent Kafka versions.
+Action. Verify `delete.topic.enable=true` on all brokers. Bring the failed nodes back up, make sure there's an active controller (`kafka-metadata-quorum.sh --bootstrap-server ... describe --status`). If completely stuck (rare corner case) — restart the active controller node.
 
 ## 11. Schema Registry rejects
 
@@ -176,7 +176,7 @@ for i := 0; i < o.buckets; i++ {
 }
 ```
 
-In real code the bucket index is derived not by sequential counter but via `hash(payload_id) % buckets` — so the same logical object always lands in the same bucket. Per-object ordering is preserved, and the skew is gone. In our demo we just cycle through all buckets in order — that's enough for illustration.
+In real code the bucket index is computed as `hash(payload_id) % buckets` — so the same logical object always lands in the same bucket. Per-object ordering is preserved, and the skew is gone. In our demo we just cycle through all buckets in order — that's enough for illustration.
 
 ### under-replicated-watch
 
@@ -195,7 +195,7 @@ for _, t := range td {
 }
 ```
 
-This is the same formula as the JMX metric `UnderReplicatedPartitions` on the broker. We're just observing from the client's perspective, without connecting to JMX. Works as long as we can reach at least one broker — `ListTopics` routes itself to the metadata leader via franz-go.
+This is the same formula as the JMX metric `UnderReplicatedPartitions` on the broker. We're just observing from the client's perspective, without connecting to JMX. Works as long as we can reach at least one broker — `ListTopics` is a metadata request, any live broker serves it, and franz-go picks an available one automatically.
 
 The lecture scenario — run `make run-watch` in one terminal, `make kill-broker` in another. On the next tick you can see the broker is gone from `BROKERS` and partitions where it was in `Replicas` have gone UR. After `make restore-broker` — back to green.
 
@@ -239,4 +239,4 @@ Also watch kafka-ui (http://localhost:8080) during `kill-broker` — the main sc
 | SR rejects | `buf breaking --against` locally | block 11 |
 | Connector failed | `docker logs kafka-connect` | block 12 |
 
-This isn't the full list of what can break. It's the baseline set of "what you'll encounter in the first month of cluster life". The longer you live with Kafka, the longer your own runbook grows. This one is the starting point.
+This runbook covers the baseline set of "what you'll encounter in the first month of cluster life". A full survey of everything that can break would be much longer. The longer you live with Kafka, the longer your own runbook grows. This one is the starting point.

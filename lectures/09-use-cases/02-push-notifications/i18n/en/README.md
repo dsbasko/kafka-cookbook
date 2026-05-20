@@ -241,18 +241,16 @@ What it does:
 
 ```go
 if lastSnap.dlq > 0 {
-    fbCfg.set(0.0, 0.0, 5)
-    apnsCfg.set(0.0, 0.0, 5)
+    fbCfg.set(0.0, 0.0, 5)   // liveMockHandler reads atomically,
+    apnsCfg.set(0.0, 0.0, 5) // the change is visible on the next request
     whCfg.set(0.0, 0.0, 5)
-    fbSrv.Config.Handler = mockserver.Handler(mockConfigToServer("firebase", fbCfg), fbStats)
-    // ... same for apns / webhook ...
     replayed, err := replayDLQ(root, bootstrap)
     threshold := baseline.delivered + replayed/2
     // wait until delivered ≥ threshold
 }
 ```
 
-There's one non-obvious thing here. When the mock handler is created via `mockserver.Handler(cfg, stats)`, it freezes `cfg` in a closure. To change the fail rate mid-test — we recreate the handler. Not the "correct" solution for production (which needs a mutable config), but for the test it's the shortest and clearest approach.
+There's a nuance here. `mockserver.Handler(cfg, stats)` freezes `cfg` in a closure, so the test wraps it in `liveMockHandler`: it holds a `mockConfig` with `atomic.Value` fields and reads them on every request. A fail-rate switch via `cfg.set(...)` takes effect on the next incoming request, no handler swap needed — `http.Server.Handler` is a plain field with no atomic guarantees, and a race with in-flight requests would be caught by `go test -race`.
 
 200 notifications instead of the original 5000 — for speed on a dev machine. The logic is the same; the test runs in 12–15 seconds. For real load, change the `totalNotifications` constant.
 

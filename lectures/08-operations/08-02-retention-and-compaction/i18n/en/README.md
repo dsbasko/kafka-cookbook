@@ -69,7 +69,7 @@ ends,   err := admin.ListEndOffsets(rpcCtx, topic)
 size,   err := topicSize(rpcCtx, admin, topic)
 // ...
 fmt.Fprintf(tw, "%d\t%d\t%d\t%d\n", s.Partition, s.Offset, latest, latest-s.Offset)
-fmt.Printf("size on disk (одна реплика): %d bytes\n", size)
+fmt.Printf("size on disk (single replica): %d bytes\n", size)
 ```
 
 `ListStartOffsets` returns the offset of the first still-live record in each partition. Before retention kicks in, that's 0. When the broker cuts the first closed segment, earliest jumps immediately to the offset at the start of the next segment. It always jumps a full segment at a time — earliest does not move record by record.

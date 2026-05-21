@@ -218,6 +218,13 @@
   font-variant-ligatures: none;
 }
 
+/* Fira Code is built around its ligature set (`->`, `=>`, `!=`, `===` …) —
+ * disabling them removes half its identity. Opt in only when Fira Code is the
+ * active code font; JetBrains Mono stays ligature-free per the rule above. */
+[data-code-font='fira'] .markdown figure[data-rehype-pretty-code-figure] code {
+  font-variant-ligatures: contextual;
+}
+
 .markdown figure[data-rehype-pretty-code-figure] code [data-line] {
   display: block;
   padding: 0;

@@ -39,14 +39,15 @@ function clearHtmlAttrs() {
 }
 
 describe('isProseFont', () => {
-  it('accepts serif, sans, lora', () => {
+  it('accepts serif, sans, slab', () => {
     expect(isProseFont('serif')).toBe(true);
     expect(isProseFont('sans')).toBe(true);
-    expect(isProseFont('lora')).toBe(true);
+    expect(isProseFont('slab')).toBe(true);
   });
 
   it('rejects everything else', () => {
     expect(isProseFont('SERIF')).toBe(false);
+    expect(isProseFont('lora')).toBe(false);
     expect(isProseFont('')).toBe(false);
     expect(isProseFont(null)).toBe(false);
     expect(isProseFont(undefined)).toBe(false);
@@ -55,13 +56,13 @@ describe('isProseFont', () => {
 });
 
 describe('isCodeFont', () => {
-  it('accepts jetbrains, fira, plex', () => {
+  it('accepts jetbrains, fira', () => {
     expect(isCodeFont('jetbrains')).toBe(true);
     expect(isCodeFont('fira')).toBe(true);
-    expect(isCodeFont('plex')).toBe(true);
   });
 
   it('rejects everything else', () => {
+    expect(isCodeFont('plex')).toBe(false);
     expect(isCodeFont('mono')).toBe(false);
     expect(isCodeFont(null)).toBe(false);
     expect(isCodeFont(3)).toBe(false);
@@ -113,14 +114,14 @@ describe('readStoredPrefs / writeStoredPrefs', () => {
       JSON.stringify({
         proseSize: 3,
         codeSize: 99,
-        proseFont: 'lora',
+        proseFont: 'slab',
         codeFont: 'unknown',
       }),
     );
     expect(readStoredPrefs()).toEqual({
       proseSize: 3,
       codeSize: DEFAULT_PREFS.codeSize,
-      proseFont: 'lora',
+      proseFont: 'slab',
       codeFont: DEFAULT_PREFS.codeFont,
     });
   });
@@ -139,11 +140,11 @@ describe('applyPrefs', () => {
   });
 
   it('writes all four data-* attributes', () => {
-    applyPrefs({ proseSize: 3, codeSize: 2, proseFont: 'sans', codeFont: 'plex' });
+    applyPrefs({ proseSize: 3, codeSize: 2, proseFont: 'sans', codeFont: 'fira' });
     expect(document.documentElement.dataset.proseSize).toBe('3');
     expect(document.documentElement.dataset.codeSize).toBe('2');
     expect(document.documentElement.dataset.proseFont).toBe('sans');
-    expect(document.documentElement.dataset.codeFont).toBe('plex');
+    expect(document.documentElement.dataset.codeFont).toBe('fira');
   });
 });
 
@@ -168,13 +169,13 @@ describe('READING_PREFS_INIT_SCRIPT', () => {
   it('uses stored values when fully valid', () => {
     window.localStorage.setItem(
       READING_PREFS_STORAGE_KEY,
-      JSON.stringify({ proseSize: 3, codeSize: 1, proseFont: 'lora', codeFont: 'plex' }),
+      JSON.stringify({ proseSize: 3, codeSize: 1, proseFont: 'slab', codeFont: 'fira' }),
     );
     new Function(READING_PREFS_INIT_SCRIPT)();
     expect(document.documentElement.dataset.proseSize).toBe('3');
     expect(document.documentElement.dataset.codeSize).toBe('1');
-    expect(document.documentElement.dataset.proseFont).toBe('lora');
-    expect(document.documentElement.dataset.codeFont).toBe('plex');
+    expect(document.documentElement.dataset.proseFont).toBe('slab');
+    expect(document.documentElement.dataset.codeFont).toBe('fira');
   });
 
   it('falls back to defaults when JSON is malformed', () => {

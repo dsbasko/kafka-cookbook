@@ -23,7 +23,7 @@ const setCodeFont = vi.fn();
 
 const ctxRef: {
   current: {
-    prefs: { proseSize: 0 | 1 | 2 | 3; codeSize: 0 | 1 | 2 | 3; proseFont: 'serif' | 'sans' | 'lora'; codeFont: 'jetbrains' | 'fira' | 'plex' };
+    prefs: { proseSize: 0 | 1 | 2 | 3; codeSize: 0 | 1 | 2 | 3; proseFont: 'serif' | 'sans' | 'slab'; codeFont: 'jetbrains' | 'fira' };
   };
 } = {
   current: {
@@ -323,11 +323,11 @@ describe('SettingsToggle', () => {
     expect(setProseFont).toHaveBeenCalledWith('sans');
   });
 
-  it('clicking the Lora pill calls setProseFont("lora")', () => {
+  it('clicking the Roboto Slab pill calls setProseFont("slab")', () => {
     renderToggle();
     click(trigger());
-    click(pillByProseFont('lora'));
-    expect(setProseFont).toHaveBeenCalledWith('lora');
+    click(pillByProseFont('slab'));
+    expect(setProseFont).toHaveBeenCalledWith('slab');
   });
 
   it('clicking the Fira Code pill calls setCodeFont("fira")', () => {
@@ -337,27 +337,20 @@ describe('SettingsToggle', () => {
     expect(setCodeFont).toHaveBeenCalledWith('fira');
   });
 
-  it('clicking the IBM Plex Mono pill calls setCodeFont("plex")', () => {
-    renderToggle();
-    click(trigger());
-    click(pillByCodeFont('plex'));
-    expect(setCodeFont).toHaveBeenCalledWith('plex');
-  });
-
   it('marks the active prose-font pill via aria-checked and data-active', () => {
-    ctxRef.current.prefs = { proseSize: 1, codeSize: 0, proseFont: 'lora', codeFont: 'jetbrains' };
+    ctxRef.current.prefs = { proseSize: 1, codeSize: 0, proseFont: 'slab', codeFont: 'jetbrains' };
     renderToggle();
     click(trigger());
-    expect(pillByProseFont('lora').getAttribute('aria-checked')).toBe('true');
-    expect(pillByProseFont('lora').getAttribute('data-active')).toBe('true');
+    expect(pillByProseFont('slab').getAttribute('aria-checked')).toBe('true');
+    expect(pillByProseFont('slab').getAttribute('data-active')).toBe('true');
     expect(pillByProseFont('serif').getAttribute('aria-checked')).toBe('false');
   });
 
   it('marks the active code-font pill via aria-checked and data-active', () => {
-    ctxRef.current.prefs = { proseSize: 1, codeSize: 0, proseFont: 'serif', codeFont: 'plex' };
+    ctxRef.current.prefs = { proseSize: 1, codeSize: 0, proseFont: 'serif', codeFont: 'fira' };
     renderToggle();
     click(trigger());
-    expect(pillByCodeFont('plex').getAttribute('aria-checked')).toBe('true');
+    expect(pillByCodeFont('fira').getAttribute('aria-checked')).toBe('true');
     expect(pillByCodeFont('jetbrains').getAttribute('aria-checked')).toBe('false');
   });
 

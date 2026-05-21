@@ -73,14 +73,14 @@ describe('ReadingPrefsProvider', () => {
   it('reads prefs from <html> data-* attributes on mount', () => {
     document.documentElement.setAttribute('data-prose-size', '3');
     document.documentElement.setAttribute('data-code-size', '1');
-    document.documentElement.setAttribute('data-prose-font', 'lora');
+    document.documentElement.setAttribute('data-prose-font', 'slab');
     document.documentElement.setAttribute('data-code-font', 'fira');
     const captured: { current: Captured } = { current: null };
     render(captured);
     expect(captured.current?.prefs).toEqual({
       proseSize: 3,
       codeSize: 1,
-      proseFont: 'lora',
+      proseFont: 'slab',
       codeFont: 'fira',
     });
   });
@@ -130,11 +130,11 @@ describe('ReadingPrefsProvider', () => {
     const captured: { current: Captured } = { current: null };
     render(captured);
     act(() => {
-      captured.current?.setCodeFont('plex');
+      captured.current?.setCodeFont('fira');
     });
-    expect(captured.current?.prefs.codeFont).toBe('plex');
-    expect(document.documentElement.dataset.codeFont).toBe('plex');
-    expect(JSON.parse(window.localStorage.getItem(READING_PREFS_STORAGE_KEY)!).codeFont).toBe('plex');
+    expect(captured.current?.prefs.codeFont).toBe('fira');
+    expect(document.documentElement.dataset.codeFont).toBe('fira');
+    expect(JSON.parse(window.localStorage.getItem(READING_PREFS_STORAGE_KEY)!).codeFont).toBe('fira');
   });
 
   it('persists the full prefs object on every setter call', () => {
@@ -170,7 +170,7 @@ describe('ReadingPrefsProvider', () => {
   it('syncs state from localStorage when a storage event for the prefs key fires', () => {
     const captured: { current: Captured } = { current: null };
     render(captured);
-    const incoming = { proseSize: 3, codeSize: 0, proseFont: 'lora', codeFont: 'plex' };
+    const incoming = { proseSize: 3, codeSize: 0, proseFont: 'slab', codeFont: 'fira' };
     window.localStorage.setItem(READING_PREFS_STORAGE_KEY, JSON.stringify(incoming));
     act(() => {
       window.dispatchEvent(
@@ -183,8 +183,8 @@ describe('ReadingPrefsProvider', () => {
     expect(captured.current?.prefs).toEqual(incoming);
     expect(document.documentElement.dataset.proseSize).toBe('3');
     expect(document.documentElement.dataset.codeSize).toBe('0');
-    expect(document.documentElement.dataset.proseFont).toBe('lora');
-    expect(document.documentElement.dataset.codeFont).toBe('plex');
+    expect(document.documentElement.dataset.proseFont).toBe('slab');
+    expect(document.documentElement.dataset.codeFont).toBe('fira');
   });
 
 });

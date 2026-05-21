@@ -40,10 +40,9 @@ describe('UI_STRINGS', () => {
       'readingPrefsIncrease',
       'readingPrefsFontSerif',
       'readingPrefsFontSans',
-      'readingPrefsFontLora',
+      'readingPrefsFontSlab',
       'readingPrefsFontJetBrains',
       'readingPrefsFontFira',
-      'readingPrefsFontPlex',
       // SettingsToggle eyebrow is a code-style path that stays the same.
       'settingsEyebrow',
       // Code preview is a literal code snippet — same in both languages.

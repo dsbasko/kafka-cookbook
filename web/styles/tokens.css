@@ -132,8 +132,8 @@
 [data-prose-font='sans'] {
   --prose-font-active: var(--font-prose-inter);
 }
-[data-prose-font='lora'] {
-  --prose-font-active: var(--font-prose-lora);
+[data-prose-font='slab'] {
+  --prose-font-active: var(--font-prose-slab);
 }
 
 [data-code-font='jetbrains'] {
@@ -141,9 +141,6 @@
 }
 [data-code-font='fira'] {
   --code-font-active: var(--font-code-fira);
-}
-[data-code-font='plex'] {
-  --code-font-active: var(--font-code-plex);
 }
 
 /* Light theme — neo-academic cream + deep moss accent. */

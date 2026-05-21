@@ -154,10 +154,9 @@ export type UIDict = {
   readingPrefsIncrease: string;
   readingPrefsFontSerif: string;
   readingPrefsFontSans: string;
-  readingPrefsFontLora: string;
+  readingPrefsFontSlab: string;
   readingPrefsFontJetBrains: string;
   readingPrefsFontFira: string;
-  readingPrefsFontPlex: string;
   readingPrefsPreviewProse: string;
   readingPrefsPreviewCode: string;
 };
@@ -281,12 +280,11 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
     readingPrefsFont: 'Шрифт',
     readingPrefsDecrease: 'A−',
     readingPrefsIncrease: 'A+',
-    readingPrefsFontSerif: 'Source',
+    readingPrefsFontSerif: 'Literata',
     readingPrefsFontSans: 'Inter',
-    readingPrefsFontLora: 'Lora',
+    readingPrefsFontSlab: 'Roboto Slab',
     readingPrefsFontJetBrains: 'JetBrains',
     readingPrefsFontFira: 'Fira',
-    readingPrefsFontPlex: 'IBM Plex',
     readingPrefsPreviewProse:
       'Apache Kafka — распределённая платформа потоковой передачи событий.',
     readingPrefsPreviewCode: 'consumer.subscribe(topics)',
@@ -409,12 +407,11 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
     readingPrefsFont: 'Font',
     readingPrefsDecrease: 'A−',
     readingPrefsIncrease: 'A+',
-    readingPrefsFontSerif: 'Source',
+    readingPrefsFontSerif: 'Literata',
     readingPrefsFontSans: 'Inter',
-    readingPrefsFontLora: 'Lora',
+    readingPrefsFontSlab: 'Roboto Slab',
     readingPrefsFontJetBrains: 'JetBrains',
     readingPrefsFontFira: 'Fira',
-    readingPrefsFontPlex: 'IBM Plex',
     readingPrefsPreviewProse: 'Apache Kafka is a distributed event streaming platform.',
     readingPrefsPreviewCode: 'consumer.subscribe(topics)',
   },

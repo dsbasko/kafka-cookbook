@@ -46,13 +46,12 @@ const CODE_SIZE_PX: Record<SizeStep, number> = {
 const PROSE_FONT_LABEL_KEYS: Record<ProseFont, keyof UIDict> = {
   serif: 'readingPrefsFontSerif',
   sans: 'readingPrefsFontSans',
-  lora: 'readingPrefsFontLora',
+  slab: 'readingPrefsFontSlab',
 };
 
 const CODE_FONT_LABEL_KEYS: Record<CodeFont, keyof UIDict> = {
   jetbrains: 'readingPrefsFontJetBrains',
   fira: 'readingPrefsFontFira',
-  plex: 'readingPrefsFontPlex',
 };
 
 const THEME_LABEL_KEYS: Record<ThemePreference, 'themeLight' | 'themeDark' | 'themeSystem'> = {

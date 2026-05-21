@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Fira_Code, IBM_Plex_Mono, Inter, Lora, Manrope, Source_Serif_4 } from 'next/font/google';
+import { Fira_Code, Inter, Literata, Manrope, Roboto_Slab } from 'next/font/google';
 import localFont from 'next/font/local';
 import { ReadingPrefsProvider } from '@/components/ReadingPrefsProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -34,25 +34,21 @@ const jetbrains = localFont({
   ],
 });
 
-const sourceSerif = Source_Serif_4({
+// Literata is the default prose face — designed by TypeTogether for Google Play
+// Books, tuned for long-form on-screen reading (low stroke contrast, sturdy
+// serifs, near-upright italic that holds the pixel grid).
+const literataProse = Literata({
   subsets: ['latin', 'cyrillic'],
+  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
   display: 'swap',
   variable: '--font-serif',
-  weight: ['400', '500', '600'],
 });
 
 // Optional reading-prefs fonts. Weights are pinned explicitly so next/font does
 // not pull the full axis (cyrillic subsets balloon otherwise). Only the CSS
 // variable is exposed; the actual font kicks in once the user picks the
 // matching prose/code option in <SettingsToggle>.
-const loraProse = Lora({
-  subsets: ['latin', 'cyrillic'],
-  weight: ['400', '600', '700'],
-  style: ['normal', 'italic'],
-  display: 'swap',
-  variable: '--font-prose-lora',
-});
-
 const interProse = Inter({
   subsets: ['latin', 'cyrillic'],
   weight: ['400', '500', '600', '700'],
@@ -61,20 +57,22 @@ const interProse = Inter({
   variable: '--font-prose-inter',
 });
 
+// Roboto Slab provides the "slab" universe — third prose option. It has no
+// true italic, so reserve it for accent/short-form blocks (see slab.css).
+const robotoSlab = Roboto_Slab({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['400', '500', '600', '700'],
+  style: ['normal'],
+  display: 'swap',
+  variable: '--font-prose-slab',
+});
+
 const firaCode = Fira_Code({
-  subsets: ['latin'],
+  subsets: ['latin', 'cyrillic'],
   weight: ['400', '500', '700'],
   style: ['normal'],
   display: 'swap',
   variable: '--font-code-fira',
-});
-
-const plexCode = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '700'],
-  style: ['normal', 'italic'],
-  display: 'swap',
-  variable: '--font-code-plex',
 });
 
 export function generateMetadata(): Metadata {
@@ -133,7 +131,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang={DEFAULT_LANG}
       data-theme="light"
-      className={`${manrope.variable} ${jetbrains.variable} ${sourceSerif.variable} ${loraProse.variable} ${interProse.variable} ${firaCode.variable} ${plexCode.variable}`}
+      className={`${manrope.variable} ${jetbrains.variable} ${literataProse.variable} ${interProse.variable} ${robotoSlab.variable} ${firaCode.variable}`}
       suppressHydrationWarning
     >
       <head>

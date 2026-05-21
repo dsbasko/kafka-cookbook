@@ -1,6 +1,6 @@
 export type SizeStep = 0 | 1 | 2 | 3;
-export type ProseFont = 'serif' | 'sans' | 'lora';
-export type CodeFont = 'jetbrains' | 'fira' | 'plex';
+export type ProseFont = 'serif' | 'sans' | 'slab';
+export type CodeFont = 'jetbrains' | 'fira';
 
 export interface ReadingPrefs {
   proseSize: SizeStep;
@@ -9,10 +9,12 @@ export interface ReadingPrefs {
   codeFont: CodeFont;
 }
 
-export const READING_PREFS_STORAGE_KEY = 'kafka-cookbook-reading-prefs:v1';
+// Bumped from v1 → v2 when the prose `lora` option became `slab` (Roboto Slab)
+// and the `plex` code option was retired. Old stored values fall back to defaults.
+export const READING_PREFS_STORAGE_KEY = 'kafka-cookbook-reading-prefs:v2';
 
-export const PROSE_FONTS = ['serif', 'sans', 'lora'] as const;
-export const CODE_FONTS = ['jetbrains', 'fira', 'plex'] as const;
+export const PROSE_FONTS = ['serif', 'sans', 'slab'] as const;
+export const CODE_FONTS = ['jetbrains', 'fira'] as const;
 export const SIZE_STEPS = [0, 1, 2, 3] as const;
 
 // Step values match design reference: 14 / 16 / 18 / 20 px.
@@ -24,11 +26,11 @@ export const DEFAULT_PREFS: ReadingPrefs = {
 };
 
 export function isProseFont(value: unknown): value is ProseFont {
-  return value === 'serif' || value === 'sans' || value === 'lora';
+  return value === 'serif' || value === 'sans' || value === 'slab';
 }
 
 export function isCodeFont(value: unknown): value is CodeFont {
-  return value === 'jetbrains' || value === 'fira' || value === 'plex';
+  return value === 'jetbrains' || value === 'fira';
 }
 
 export function isSizeStep(value: unknown): value is SizeStep {
@@ -87,8 +89,8 @@ export const READING_PREFS_INIT_SCRIPT = `(() => {
   var KEY = ${JSON.stringify(READING_PREFS_STORAGE_KEY)};
   var defaults = ${JSON.stringify(DEFAULT_PREFS)};
   var sizes = [0, 1, 2, 3];
-  var proseFonts = ['serif', 'sans', 'lora'];
-  var codeFonts = ['jetbrains', 'fira', 'plex'];
+  var proseFonts = ['serif', 'sans', 'slab'];
+  var codeFonts = ['jetbrains', 'fira'];
   var prefs = {
     proseSize: defaults.proseSize,
     codeSize: defaults.codeSize,

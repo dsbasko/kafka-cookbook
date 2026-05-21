@@ -73,7 +73,7 @@
   --prose-max-width: 900px;
 }
 
-/* Four-step scale matching design reference: 14 / 16 / 18 / 20 px.
+/* Six-step scale matching design reference: 14 / 16 / 18 / 20 / 22 / 24 px.
  * Article max-width scales with the same step so the line-length budget
  * (~52–58 characters) stays comfortable as prose grows. */
 [data-prose-size='0'] {
@@ -91,6 +91,14 @@
 [data-prose-size='3'] {
   --prose-font-size: 20px;
   --prose-max-width: 1060px;
+}
+[data-prose-size='4'] {
+  --prose-font-size: 22px;
+  --prose-max-width: 1140px;
+}
+[data-prose-size='5'] {
+  --prose-font-size: 24px;
+  --prose-max-width: 1220px;
 }
 
 /* Mobile: shift the prose scale down one step so the default (step 1)
@@ -111,6 +119,12 @@
   [data-prose-size='3'] {
     --prose-font-size: 18px;
   }
+  [data-prose-size='4'] {
+    --prose-font-size: 20px;
+  }
+  [data-prose-size='5'] {
+    --prose-font-size: 22px;
+  }
 }
 
 [data-code-size='0'] {
@@ -124,6 +138,12 @@
 }
 [data-code-size='3'] {
   --code-font-size: 20px;
+}
+[data-code-size='4'] {
+  --code-font-size: 22px;
+}
+[data-code-size='5'] {
+  --code-font-size: 24px;
 }
 
 [data-prose-font='serif'] {
@@ -172,6 +192,41 @@
   --shadow-sm: 0 1px 2px rgba(35, 25, 10, 0.04), 0 0 0 1px rgba(35, 25, 10, 0.04);
   --shadow-md: 0 4px 16px rgba(35, 25, 10, 0.06), 0 1px 3px rgba(35, 25, 10, 0.04);
   --shadow-lg: 0 12px 32px rgba(35, 25, 10, 0.12);
+}
+
+/* Paper theme — warm sepia for long-form reading.
+ * Bg/fg pair #f3eedc / #2f2a24 ≈ 12.2:1 (above WCAG AAA for body text).
+ * Accent shifts from moss to muted brown to reinforce the paper identity. */
+[data-theme='paper'] {
+  color-scheme: light;
+
+  --bg-default: #f3eedc;
+  --bg-surface: #fbf7ea;
+  --bg-subtle: #ede5cf;
+  --bg-muted: #e8ddc5;
+  --bg-stroke: #e5dcc8;
+  --bg-stroke-strong: #d8ccb3;
+
+  --content-primary: #2f2a24;
+  --content-secondary: #5b5148;
+  --content-tertiary: #6b5e52;
+  --content-inverse: #fbf7ea;
+  --content-link: #1f5c57;
+  --content-link-hover: #174842;
+
+  --accent-main: #7e6149;
+  --accent-main-hover: #65503c;
+  --accent-main-soft: rgba(126, 97, 73, 0.12);
+  --accent-success: #2e7855;
+  --accent-success-soft: rgba(46, 120, 85, 0.14);
+  --accent-notice: #a86420;
+  --accent-notice-soft: rgba(168, 100, 32, 0.16);
+  --accent-critical: #9f3a2a;
+  --accent-critical-soft: rgba(159, 58, 42, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(47, 42, 36, 0.06), 0 0 0 1px rgba(47, 42, 36, 0.05);
+  --shadow-md: 0 4px 16px rgba(47, 42, 36, 0.08), 0 1px 3px rgba(47, 42, 36, 0.05);
+  --shadow-lg: 0 12px 32px rgba(47, 42, 36, 0.14);
 }
 
 /* Dark theme — deep ink with sage accent. */

@@ -23,7 +23,12 @@ const setCodeFont = vi.fn();
 
 const ctxRef: {
   current: {
-    prefs: { proseSize: 0 | 1 | 2 | 3; codeSize: 0 | 1 | 2 | 3; proseFont: 'serif' | 'sans' | 'slab'; codeFont: 'jetbrains' | 'fira' };
+    prefs: {
+      proseSize: 0 | 1 | 2 | 3 | 4 | 5;
+      codeSize: 0 | 1 | 2 | 3 | 4 | 5;
+      proseFont: 'serif' | 'sans' | 'slab';
+      codeFont: 'jetbrains' | 'fira';
+    };
   };
 } = {
   current: {
@@ -41,7 +46,9 @@ vi.mock('@/components/ReadingPrefsProvider', () => ({
   }),
 }));
 
-const themePreferenceRef: { current: 'light' | 'dark' | 'system' } = { current: 'system' };
+const themePreferenceRef: { current: 'light' | 'dark' | 'paper' } = {
+  current: 'light',
+};
 const setThemePreference = vi.fn();
 
 vi.mock('@/components/ThemeProvider', () => ({
@@ -70,7 +77,7 @@ let root: Root;
 beforeEach(() => {
   paramsRef.current = { lang: 'ru' };
   pathnameRef.current = '/ru/';
-  themePreferenceRef.current = 'system';
+  themePreferenceRef.current = 'light';
   setProseSize.mockReset();
   setCodeSize.mockReset();
   setProseFont.mockReset();
@@ -210,6 +217,13 @@ describe('SettingsToggle', () => {
     expect(popover().hasAttribute('hidden')).toBe(false);
   });
 
+  it('renders a paper theme pill and routes its click to setPreference', () => {
+    renderToggle();
+    click(trigger());
+    click(pillByTheme('paper'));
+    expect(setThemePreference).toHaveBeenCalledWith('paper');
+  });
+
   it('marks the active language pill based on the current pathname', () => {
     pathnameRef.current = '/en/some-lesson';
     renderToggle();
@@ -250,6 +264,20 @@ describe('SettingsToggle', () => {
     expect(container.querySelector('[data-kind="code-value"]')?.textContent).toBe('20px');
   });
 
+  it('renders 24px for the topmost prose step', () => {
+    ctxRef.current.prefs = { proseSize: 5, codeSize: 0, proseFont: 'serif', codeFont: 'jetbrains' };
+    renderToggle();
+    click(trigger());
+    expect(container.querySelector('[data-kind="prose-value"]')?.textContent).toBe('24px');
+  });
+
+  it('renders 24px for the topmost code step', () => {
+    ctxRef.current.prefs = { proseSize: 1, codeSize: 5, proseFont: 'serif', codeFont: 'jetbrains' };
+    renderToggle();
+    click(trigger());
+    expect(container.querySelector('[data-kind="code-value"]')?.textContent).toBe('24px');
+  });
+
   it('disables A− for prose when proseSize === 0', () => {
     ctxRef.current.prefs = { proseSize: 0, codeSize: 0, proseFont: 'serif', codeFont: 'jetbrains' };
     renderToggle();
@@ -258,8 +286,16 @@ describe('SettingsToggle', () => {
     expect(buttonByKind('prose-increase').disabled).toBe(false);
   });
 
-  it('disables A+ for prose when proseSize === 3', () => {
+  it('keeps A+ enabled for prose at proseSize === 3 (mid-scale)', () => {
     ctxRef.current.prefs = { proseSize: 3, codeSize: 0, proseFont: 'serif', codeFont: 'jetbrains' };
+    renderToggle();
+    click(trigger());
+    expect(buttonByKind('prose-decrease').disabled).toBe(false);
+    expect(buttonByKind('prose-increase').disabled).toBe(false);
+  });
+
+  it('disables A+ for prose when proseSize === 5', () => {
+    ctxRef.current.prefs = { proseSize: 5, codeSize: 0, proseFont: 'serif', codeFont: 'jetbrains' };
     renderToggle();
     click(trigger());
     expect(buttonByKind('prose-decrease').disabled).toBe(false);
@@ -274,8 +310,16 @@ describe('SettingsToggle', () => {
     expect(buttonByKind('code-increase').disabled).toBe(false);
   });
 
-  it('disables A+ for code when codeSize === 3', () => {
+  it('keeps A+ enabled for code at codeSize === 3 (mid-scale)', () => {
     ctxRef.current.prefs = { proseSize: 1, codeSize: 3, proseFont: 'serif', codeFont: 'jetbrains' };
+    renderToggle();
+    click(trigger());
+    expect(buttonByKind('code-decrease').disabled).toBe(false);
+    expect(buttonByKind('code-increase').disabled).toBe(false);
+  });
+
+  it('disables A+ for code when codeSize === 5', () => {
+    ctxRef.current.prefs = { proseSize: 1, codeSize: 5, proseFont: 'serif', codeFont: 'jetbrains' };
     renderToggle();
     click(trigger());
     expect(buttonByKind('code-decrease').disabled).toBe(false);

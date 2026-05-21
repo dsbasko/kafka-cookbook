@@ -70,17 +70,19 @@ describe('isCodeFont', () => {
 });
 
 describe('isSizeStep', () => {
-  it('accepts 0..3', () => {
+  it('accepts 0..5', () => {
     expect(isSizeStep(0)).toBe(true);
     expect(isSizeStep(1)).toBe(true);
     expect(isSizeStep(2)).toBe(true);
     expect(isSizeStep(3)).toBe(true);
+    expect(isSizeStep(4)).toBe(true);
+    expect(isSizeStep(5)).toBe(true);
   });
 
   it('rejects out of range and non-integers', () => {
     expect(isSizeStep(-1)).toBe(false);
-    expect(isSizeStep(4)).toBe(false);
-    expect(isSizeStep(5)).toBe(false);
+    expect(isSizeStep(6)).toBe(false);
+    expect(isSizeStep(7)).toBe(false);
     expect(isSizeStep(1.5)).toBe(false);
     expect(isSizeStep('2')).toBe(false);
     expect(isSizeStep(null)).toBe(false);

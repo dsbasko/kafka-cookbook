@@ -1,4 +1,4 @@
-export type SizeStep = 0 | 1 | 2 | 3;
+export type SizeStep = 0 | 1 | 2 | 3 | 4 | 5;
 export type ProseFont = 'serif' | 'sans' | 'slab';
 export type CodeFont = 'jetbrains' | 'fira';
 
@@ -15,9 +15,9 @@ export const READING_PREFS_STORAGE_KEY = 'kafka-cookbook-reading-prefs:v2';
 
 export const PROSE_FONTS = ['serif', 'sans', 'slab'] as const;
 export const CODE_FONTS = ['jetbrains', 'fira'] as const;
-export const SIZE_STEPS = [0, 1, 2, 3] as const;
+export const SIZE_STEPS = [0, 1, 2, 3, 4, 5] as const;
 
-// Step values match design reference: 14 / 16 / 18 / 20 px.
+// Step values match design reference: 14 / 16 / 18 / 20 / 22 / 24 px.
 export const DEFAULT_PREFS: ReadingPrefs = {
   proseSize: 1,
   codeSize: 0,
@@ -34,7 +34,14 @@ export function isCodeFont(value: unknown): value is CodeFont {
 }
 
 export function isSizeStep(value: unknown): value is SizeStep {
-  return value === 0 || value === 1 || value === 2 || value === 3;
+  return (
+    value === 0 ||
+    value === 1 ||
+    value === 2 ||
+    value === 3 ||
+    value === 4 ||
+    value === 5
+  );
 }
 
 export function readStoredPrefs(): ReadingPrefs {
@@ -88,7 +95,7 @@ export function applyPrefs(prefs: ReadingPrefs): void {
 export const READING_PREFS_INIT_SCRIPT = `(() => {
   var KEY = ${JSON.stringify(READING_PREFS_STORAGE_KEY)};
   var defaults = ${JSON.stringify(DEFAULT_PREFS)};
-  var sizes = [0, 1, 2, 3];
+  var sizes = [0, 1, 2, 3, 4, 5];
   var proseFonts = ['serif', 'sans', 'slab'];
   var codeFonts = ['jetbrains', 'fira'];
   var prefs = {

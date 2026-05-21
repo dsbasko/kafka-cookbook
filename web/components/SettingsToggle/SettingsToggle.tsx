@@ -27,13 +27,16 @@ import styles from './SettingsToggle.module.css';
 
 const SETTINGS_REOPEN_KEY = 'kafka-cookbook:settings:reopen-after-lang';
 
-const SIZE_STEPS: SizeStep[] = [0, 1, 2, 3];
+const SIZE_STEPS: SizeStep[] = [0, 1, 2, 3, 4, 5];
+const MAX_SIZE_STEP: SizeStep = 5;
 
 const PROSE_SIZE_PX: Record<SizeStep, number> = {
   0: 14,
   1: 16,
   2: 18,
   3: 20,
+  4: 22,
+  5: 24,
 };
 
 const CODE_SIZE_PX: Record<SizeStep, number> = {
@@ -41,6 +44,8 @@ const CODE_SIZE_PX: Record<SizeStep, number> = {
   1: 16,
   2: 18,
   3: 20,
+  4: 22,
+  5: 24,
 };
 
 const PROSE_FONT_LABEL_KEYS: Record<ProseFont, keyof UIDict> = {
@@ -54,10 +59,13 @@ const CODE_FONT_LABEL_KEYS: Record<CodeFont, keyof UIDict> = {
   fira: 'readingPrefsFontFira',
 };
 
-const THEME_LABEL_KEYS: Record<ThemePreference, 'themeLight' | 'themeDark' | 'themeSystem'> = {
+const THEME_LABEL_KEYS: Record<
+  ThemePreference,
+  'themeLight' | 'themeDark' | 'themePaper'
+> = {
   light: 'themeLight',
   dark: 'themeDark',
-  system: 'themeSystem',
+  paper: 'themePaper',
 };
 
 function stepDown(step: SizeStep): SizeStep {
@@ -65,7 +73,7 @@ function stepDown(step: SizeStep): SizeStep {
 }
 
 function stepUp(step: SizeStep): SizeStep {
-  return (step < 3 ? step + 1 : 3) as SizeStep;
+  return (step < MAX_SIZE_STEP ? step + 1 : MAX_SIZE_STEP) as SizeStep;
 }
 
 function replaceLangInPath(pathname: string | null, next: Lang): string {
@@ -82,6 +90,39 @@ function CloseIcon() {
   );
 }
 
+function LightThemeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.6" />
+      <path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1" />
+    </svg>
+  );
+}
+
+function PaperThemeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3.5 2.5h6.4l2.6 2.6V13a.5.5 0 0 1-.5.5h-8.5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z" />
+      <path d="M9.6 2.6V5.2h2.6" />
+      <path d="M5.5 8.4h5M5.5 10.6h3.6" />
+    </svg>
+  );
+}
+
+function DarkThemeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13.2 9.6A5.6 5.6 0 1 1 6.4 2.8a4.6 4.6 0 0 0 6.8 6.8z" />
+    </svg>
+  );
+}
+
+const THEME_ICONS: Record<ThemePreference, () => JSX.Element> = {
+  light: LightThemeIcon,
+  paper: PaperThemeIcon,
+  dark: DarkThemeIcon,
+};
+
 type SizeStepperProps = {
   kind: 'prose' | 'code';
   value: SizeStep;
@@ -93,8 +134,8 @@ type SizeStepperProps = {
 
 function SizeStepper({ kind, value, pxLabel, onStep, decreaseLabel, increaseLabel }: SizeStepperProps) {
   const isMin = value === 0;
-  const isMax = value === 3;
-  const percent = (value / 3) * 100;
+  const isMax = value === MAX_SIZE_STEP;
+  const percent = (value / MAX_SIZE_STEP) * 100;
   return (
     <div className={styles.sizeStepper}>
       <button
@@ -275,6 +316,7 @@ export function SettingsToggle() {
               {THEME_PREFERENCES.map((value) => {
                 const active = themePreference === value;
                 const label = t[THEME_LABEL_KEYS[value]];
+                const Icon = THEME_ICONS[value];
                 return (
                   <button
                     key={value}
@@ -282,12 +324,15 @@ export function SettingsToggle() {
                     role="radio"
                     aria-checked={active}
                     aria-label={label}
-                    className={styles.segOpt}
+                    className={`${styles.segOpt} ${styles.segTheme}`}
                     data-active={active ? 'true' : 'false'}
                     data-theme-pref={value}
                     onClick={() => setThemePreference(value)}
                   >
-                    {label}
+                    <span className={styles.segThemeIcon} aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span>{label}</span>
                   </button>
                 );
               })}

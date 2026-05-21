@@ -70,20 +70,27 @@
   --code-font-size: 14px;
   --prose-font-active: var(--font-serif);
   --code-font-active: var(--font-mono);
+  --prose-max-width: 900px;
 }
 
-/* Four-step scale matching design reference: 14 / 16 / 18 / 20 px. */
+/* Four-step scale matching design reference: 14 / 16 / 18 / 20 px.
+ * Article max-width scales with the same step so the line-length budget
+ * (~52–58 characters) stays comfortable as prose grows. */
 [data-prose-size='0'] {
   --prose-font-size: 14px;
+  --prose-max-width: 820px;
 }
 [data-prose-size='1'] {
   --prose-font-size: 16px;
+  --prose-max-width: 900px;
 }
 [data-prose-size='2'] {
   --prose-font-size: 18px;
+  --prose-max-width: 980px;
 }
 [data-prose-size='3'] {
   --prose-font-size: 20px;
+  --prose-max-width: 1060px;
 }
 
 /* Mobile: shift the prose scale down one step so the default (step 1)

@@ -4,13 +4,14 @@
   gap: 56px;
   align-items: start;
   padding: 56px var(--space-8) 96px;
-  max-width: 1280px;
+  max-width: calc(var(--prose-max-width) + 260px + 56px + var(--space-8) * 2);
   width: 100%;
   margin: 0 auto;
 }
 
 .page[data-has-side='false'] {
   grid-template-columns: minmax(0, 1fr);
+  max-width: calc(var(--prose-max-width) + var(--space-8) * 2);
 }
 
 .content {
@@ -19,7 +20,7 @@
 
 .article {
   min-width: 0;
-  max-width: 900px;
+  max-width: var(--prose-max-width);
 }
 
 .hero {
@@ -29,7 +30,8 @@
 }
 
 .title {
-  font-size: 72px;
+  font-family: var(--prose-font-active), Georgia, 'Source Serif Pro', serif;
+  font-size: calc(var(--prose-font-size) * 4.5);
   line-height: 1;
   letter-spacing: -0.03em;
   font-weight: var(--font-weight-bold);
@@ -51,15 +53,9 @@
   line-height: inherit;
 }
 
-/* Headings inside the article stay sans-serif (Manrope) for editorial contrast. */
-.prose :global(.markdown h2),
-.prose :global(.markdown h3),
-.prose :global(.markdown h4) {
-  font-family: var(--font-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-}
-
+/* Headings inherit the prose font family so the reading-preferences toggle
+ * (serif/sans/lora) updates body copy and headings together. */
 .prose :global(.markdown h2) {
-  font-size: 28px;
   letter-spacing: -0.02em;
   margin-top: 40px;
   margin-bottom: var(--space-5);
@@ -99,7 +95,7 @@
   }
 
   .title {
-    font-size: 56px;
+    font-size: calc(var(--prose-font-size) * 3.5);
   }
 }
 
@@ -109,7 +105,7 @@
   }
 
   .title {
-    font-size: 36px;
+    font-size: calc(var(--prose-font-size) * 2.4);
   }
 
   .prose {
@@ -117,7 +113,6 @@
   }
 
   .prose :global(.markdown h2) {
-    font-size: 22px;
     margin-top: var(--space-8);
   }
 }

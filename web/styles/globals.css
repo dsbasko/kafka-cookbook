@@ -71,12 +71,19 @@ html[data-lesson-locked='true'] [data-lesson-gate] {
    `data-locked` on any `<a>` whose `data-lesson-key` points at a still-
    locked lesson. Visual is global because the selector targets a bare
    attribute pattern that CSS Modules forbids; the trailing lock badge is
-   a local class on the link (see LessonAwareLink.module.css). */
-a[data-lesson-key][data-locked='true'] {
-  cursor: not-allowed;
+   a local class on the link (see LessonAwareLink.module.css).
+   `cursor: not-allowed` signals the disabled state on hover; actual click
+   blocking is handled by the JS preventDefault in LessonAwareLink and
+   `tabindex=-1` / `aria-disabled` stamped by the gate-mark script. */
+a[data-lesson-key][data-locked='true'],
+.markdown a[data-lesson-key][data-locked='true'] {
   color: var(--content-tertiary);
-  text-decoration: underline dotted var(--content-tertiary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--content-tertiary);
   text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: not-allowed;
 }
 
 a[data-lesson-key][data-locked='true']:hover {

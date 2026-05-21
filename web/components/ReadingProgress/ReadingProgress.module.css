@@ -1,8 +1,8 @@
 .bar {
   position: fixed;
-  top: 0;
-  left: 0;
-  height: 2px;
+  top: 69px;
+  left: 63px;
+  height: 4px;
   background: var(--accent-main);
   z-index: calc(var(--z-header) + 1);
   transition: width 80ms linear;

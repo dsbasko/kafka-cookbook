@@ -65,6 +65,23 @@
   color: var(--content-link);
 }
 
+/* Inline prose links: same color as body text, semibold, dotted underline.
+ * Identity in all three themes — the link reads as text first, then as a
+ * link via weight and underline (mirrors Substack / iA Writer style). */
+.markdown a:not(.heading-anchor) {
+  color: var(--content-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--content-tertiary);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.markdown a:not(.heading-anchor):hover {
+  color: var(--content-primary);
+  text-decoration-color: var(--content-primary);
+}
+
 .markdown a[data-external]::after {
   content: ' ↗';
   font-size: 0.8em;

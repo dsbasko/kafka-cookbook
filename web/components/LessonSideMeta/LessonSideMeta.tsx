@@ -37,7 +37,14 @@ export function LessonSideMeta({
   };
 
   return (
-    <div className={styles.meta} data-lesson-key={key}>
+    <div
+      className={styles.meta}
+      data-lesson-key={key}
+      // Gate-mark inline script flips data-completed / data-locked on every
+      // [data-lesson-key] before hydration. Without this hint React warns
+      // about "extra attributes from the server" on this div.
+      suppressHydrationWarning
+    >
       <div className={styles.row}>
         <span className={styles.key}>{t.moduleMetaKey}</span>
         <Link href={`/${lang}/${moduleId}`} className={styles.value}>

@@ -214,6 +214,11 @@ export function ModulePage({ course, module, level }: ModulePageProps) {
                   }
                 }}
                 title={t.lessonLockShort}
+                // Gate-mark inline script flips data-completed / data-next /
+                // data-locked / aria-disabled / tabindex on every [data-lesson-key]
+                // before hydration. React's reconciliation would otherwise warn
+                // about "extra attributes from the server" since the VDOM has none.
+                suppressHydrationWarning
               >
                 <span className={styles.lessonNum}>
                   {String(index + 1).padStart(2, '0')}

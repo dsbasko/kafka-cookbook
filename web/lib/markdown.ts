@@ -102,6 +102,15 @@ function walk(node: HastRoot | Element, visit: (el: Element) => void) {
   }
 }
 
+function hasAnchorDescendant(node: Element): boolean {
+  for (const child of node.children) {
+    if (child.type !== 'element') continue;
+    if (child.tagName === 'a') return true;
+    if (hasAnchorDescendant(child)) return true;
+  }
+  return false;
+}
+
 export async function renderLessonMarkdown(
   source: string,
   options: RenderLessonMarkdownOptions,
@@ -130,6 +139,10 @@ export async function renderLessonMarkdown(
     .use(rehypeAutolinkHeadings, {
       behavior: 'wrap',
       properties: { className: ['heading-anchor'] },
+      // Skip headings that already contain an <a> (markdown links inside the
+      // heading text). Wrapping such a heading would emit invalid HTML
+      // (<a><h2>...<a>...</a>...</h2></a>) and trigger a hydration failure.
+      test: (node) => !hasAnchorDescendant(node),
     })
     .use(rehypePrettyCode, PRETTY_CODE_OPTIONS)
     .use(rehypeLiftCodeBlockLanguage);

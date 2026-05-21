@@ -70,6 +70,7 @@ describe('getDict', () => {
     expect(dict.programCourse).toBeDefined();
     expect(dict.notFoundTitle).toBeDefined();
     expect(dict.themeLight).toBeDefined();
+    expect(dict.themePaper).toBeDefined();
     expect(dict.language).toBeDefined();
   });
 });

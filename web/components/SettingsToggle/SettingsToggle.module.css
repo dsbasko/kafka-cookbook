@@ -168,7 +168,7 @@
    the font/size sub-rows inside text groups. */
 .row {
   display: grid;
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: 50px 1fr;
   align-items: center;
   gap: var(--space-4);
 }
@@ -305,6 +305,28 @@
 .segOpt[data-active='true'] .segLangBadge {
   color: var(--content-primary);
   border-color: var(--bg-stroke-strong);
+}
+
+/* Theme pill: small bordered icon (sun / page / moon) + label */
+.segTheme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.segThemeIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--content-tertiary);
+  flex-shrink: 0;
+}
+
+.segOpt[data-active='true'] .segThemeIcon {
+  color: var(--content-primary);
 }
 
 /* ─── Size stepper ───────────────────────────────────────── */

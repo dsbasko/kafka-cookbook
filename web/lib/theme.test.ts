@@ -50,17 +50,19 @@ beforeAll(() => {
 });
 
 describe('isThemePreference', () => {
-  it('accepts light, dark, system', () => {
+  it('accepts light, dark, paper', () => {
     expect(isThemePreference('light')).toBe(true);
     expect(isThemePreference('dark')).toBe(true);
-    expect(isThemePreference('system')).toBe(true);
+    expect(isThemePreference('paper')).toBe(true);
   });
 
-  it('rejects everything else', () => {
+  it('rejects legacy "system" and everything else', () => {
+    expect(isThemePreference('system')).toBe(false);
     expect(isThemePreference('')).toBe(false);
     expect(isThemePreference(null)).toBe(false);
     expect(isThemePreference(undefined)).toBe(false);
     expect(isThemePreference('Light')).toBe(false);
+    expect(isThemePreference('sepia')).toBe(false);
     expect(isThemePreference(42)).toBe(false);
   });
 });
@@ -82,20 +84,10 @@ describe('getSystemTheme', () => {
 });
 
 describe('resolveTheme', () => {
-  afterEach(() => {
-    Reflect.deleteProperty(window, 'matchMedia');
-  });
-
-  it('returns the explicit preference for light/dark', () => {
+  it('returns the preference unchanged (no system intermediate)', () => {
     expect(resolveTheme('light')).toBe('light');
     expect(resolveTheme('dark')).toBe('dark');
-  });
-
-  it('falls back to system query for "system"', () => {
-    mockMatchMedia(true);
-    expect(resolveTheme('system')).toBe('dark');
-    mockMatchMedia(false);
-    expect(resolveTheme('system')).toBe('light');
+    expect(resolveTheme('paper')).toBe('paper');
   });
 });
 
@@ -104,25 +96,36 @@ describe('readStoredPreference / writeStoredPreference', () => {
     window.localStorage.clear();
   });
 
-  it('returns "system" when nothing is stored', () => {
-    expect(readStoredPreference()).toBe('system');
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia');
   });
 
-  it('returns "system" when stored value is invalid', () => {
+  it('falls back to system query when nothing is stored', () => {
+    mockMatchMedia(true);
+    expect(readStoredPreference()).toBe('dark');
+    mockMatchMedia(false);
+    expect(readStoredPreference()).toBe('light');
+  });
+
+  it('falls back to system query when stored value is invalid or legacy "system"', () => {
+    mockMatchMedia(false);
     window.localStorage.setItem(THEME_STORAGE_KEY, 'turquoise');
-    expect(readStoredPreference()).toBe('system');
+    expect(readStoredPreference()).toBe('light');
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'system');
+    expect(readStoredPreference()).toBe('light');
   });
 
   it('round-trips a valid preference', () => {
     writeStoredPreference('dark');
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
     expect(readStoredPreference()).toBe('dark');
+    writeStoredPreference('paper');
+    expect(readStoredPreference()).toBe('paper');
   });
 });
 
 describe('applyResolvedTheme / applyPreference', () => {
   afterEach(() => {
-    Reflect.deleteProperty(window, 'matchMedia');
     document.documentElement.removeAttribute('data-theme');
   });
 
@@ -131,12 +134,13 @@ describe('applyResolvedTheme / applyPreference', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
     applyResolvedTheme('light');
     expect(document.documentElement.dataset.theme).toBe('light');
+    applyResolvedTheme('paper');
+    expect(document.documentElement.dataset.theme).toBe('paper');
   });
 
-  it('applies a preference and returns the resolved theme', () => {
-    mockMatchMedia(true);
-    expect(applyPreference('system')).toBe('dark');
-    expect(document.documentElement.dataset.theme).toBe('dark');
+  it('applies a preference and returns it unchanged', () => {
+    expect(applyPreference('paper')).toBe('paper');
+    expect(document.documentElement.dataset.theme).toBe('paper');
     expect(applyPreference('light')).toBe('light');
     expect(document.documentElement.dataset.theme).toBe('light');
   });
@@ -160,7 +164,14 @@ describe('THEME_INIT_SCRIPT', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('falls back to matchMedia when stored value is "system"', () => {
+  it('respects a stored "paper" preference without falling back to system', () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'paper');
+    mockMatchMedia(true);
+    new Function(THEME_INIT_SCRIPT)();
+    expect(document.documentElement.dataset.theme).toBe('paper');
+  });
+
+  it('silently migrates legacy "system" via matchMedia', () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'system');
     mockMatchMedia(true);
     new Function(THEME_INIT_SCRIPT)();

@@ -10,9 +10,7 @@ import {
 } from 'react';
 import {
   applyResolvedTheme,
-  getSystemTheme,
   readStoredPreference,
-  resolveTheme,
   THEME_STORAGE_KEY,
   type ResolvedTheme,
   type ThemePreference,
@@ -27,40 +25,18 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>('system');
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
+  const [preference, setPreferenceState] = useState<ThemePreference>('light');
 
   useEffect(() => {
-    const stored = readStoredPreference();
-    setPreferenceState(stored);
-    setResolvedTheme(resolveTheme(stored));
+    setPreferenceState(readStoredPreference());
   }, []);
-
-  useEffect(() => {
-    if (preference !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => {
-      const resolved: ResolvedTheme = mq.matches ? 'dark' : 'light';
-      setResolvedTheme(resolved);
-      applyResolvedTheme(resolved);
-    };
-    // Listen for OS-level changes only. Don't apply on mount: the FOUC script
-    // and the storage-read effect already set the correct value, and the
-    // initial `preference` here is the stale `'system'` default — applying it
-    // would overwrite a user's stored `'light'`/`'dark'` choice with the
-    // system theme.
-    mq.addEventListener('change', handleChange);
-    return () => mq.removeEventListener('change', handleChange);
-  }, [preference]);
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
       if (event.key !== THEME_STORAGE_KEY) return;
       const next = readStoredPreference();
       setPreferenceState(next);
-      const resolved = resolveTheme(next);
-      setResolvedTheme(resolved);
-      applyResolvedTheme(resolved);
+      applyResolvedTheme(next);
     }
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -73,13 +49,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    const resolved = next === 'system' ? getSystemTheme() : next;
-    setResolvedTheme(resolved);
-    applyResolvedTheme(resolved);
+    applyResolvedTheme(next);
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ preference, resolvedTheme, setPreference }}>
+    <ThemeContext.Provider value={{ preference, resolvedTheme: preference, setPreference }}>
       {children}
     </ThemeContext.Provider>
   );

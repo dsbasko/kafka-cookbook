@@ -63,7 +63,7 @@ export type UIDict = {
   // SettingsToggle — theme section labels
   themeLight: string;
   themeDark: string;
-  themeSystem: string;
+  themePaper: string;
 
   // HomePage
   heroTitleLead: string;
@@ -205,7 +205,7 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
 
     themeLight: 'Светлая',
     themeDark: 'Тёмная',
-    themeSystem: 'Системная',
+    themePaper: 'Бумага',
 
     heroTitleLead: 'Kafka',
     heroTitleAccent: 'для тех, кто',
@@ -332,7 +332,7 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
 
     themeLight: 'Light',
     themeDark: 'Dark',
-    themeSystem: 'Auto',
+    themePaper: 'Paper',
 
     heroTitleLead: 'Kafka',
     heroTitleAccent: 'for people who',

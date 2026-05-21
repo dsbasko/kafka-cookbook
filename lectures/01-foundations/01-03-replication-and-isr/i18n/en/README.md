@@ -41,7 +41,7 @@ The leader does all the work:
 
 Followers just replicate - they pull fresh records from the leader and save them locally. They don't serve producer requests and generally don't serve consumer requests (multi-DC has `Fetch From Follower`, but that's a separate story not relevant inside a single data center).
 
-The leader is elected by the controller (we met that role in [01-01](../../../01-01-architecture-and-kraft/i18n/en/README.md), it lives on one of the KRaft quorum nodes). If a partition leader dies, the controller picks a new one from the live followers and the role transfers. Both the producer and the consumer learn about it - they re-elect the leader on the fly via metadata-refresh, no app restart needed.
+The leader is elected by the controller (we met that role in [Architecture and KRaft](../../../01-01-architecture-and-kraft/i18n/en/README.md), it lives on one of the KRaft quorum nodes). If a partition leader dies, the controller picks a new one from the live followers and the role transfers. Both the producer and the consumer learn about it - they re-elect the leader on the fly via metadata-refresh, no app restart needed.
 
 When Brew's `order-service` writes `OrderPlaced` to partition 0 of `brew.orders.v1`, under the hood this happens. The franz-go client checks its metadata cache, sees "partition 0 - leader=2", opens a connection to kafka-2, sends `Produce` there. If kafka-2 suddenly dies, the first request returns "not leader", the client fetches fresh metadata, learns the new leader (say kafka-3), and retries there. For the app this is two extra milliseconds of latency on a single message, no more.
 

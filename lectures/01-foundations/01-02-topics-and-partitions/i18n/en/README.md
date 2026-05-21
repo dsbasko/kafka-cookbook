@@ -8,7 +8,7 @@ This lecture is about cutting a topic into multiple partitions and why you'd wan
 
 A topic is a named channel that producers write to and consumers read from. At the model level it's straightforward: name the topic `brew.orders.v1` and orders flow there; name it `brew.payments.v1` and payments flow there. No exchanges or routing keys, unlike RabbitMQ. Messages simply live under that name.
 
-At the physical level (which [01-01](../../../01-01-architecture-and-kraft/i18n/en/README.md) already touched) a topic is a directory on the broker's disk. Inside the directory are log files split into segments. When a segment reaches `segment.bytes` or `segment.ms`, it closes and a new one opens. Old segments are dropped by retention (see [Offsets and retention](../../../01-04-offsets-and-retention/i18n/en/README.md)). That's everything at the physical level. No magic.
+At the physical level (which [Architecture and KRaft](../../../01-01-architecture-and-kraft/i18n/en/README.md) already touched) a topic is a directory on the broker's disk. Inside the directory are log files split into segments. When a segment reaches `segment.bytes` or `segment.ms`, it closes and a new one opens. Old segments are dropped by retention (see [Offsets and retention](../../../01-04-offsets-and-retention/i18n/en/README.md)). That's everything at the physical level. No magic.
 
 The name `brew.orders.v1` is not accidental. Brew picked the scheme `<domain>.<entity>.v<version>` so that a breaking change in event format can ship as `brew.orders.v2` next to the old topic. Producers cut over to the new schema, consumers migrate at their own pace, the old `brew.orders.v1` lives until nothing reads it any more, then it's deleted. Versioning at the topic level is the standard pattern in Kafka, because schema is per-topic and evolving it in place is painful.
 
@@ -23,7 +23,7 @@ A backend analogy. If you sharded a PostgreSQL `orders` table by `customer_id` a
 All the other Kafka properties flow from this model:
 
 - writes parallelize: producers can write to different partitions through different leaders simultaneously;
-- reads parallelize: multiple consumers in the same group divide partitions among themselves (one consumer per partition maximum, see [01-06](../../../01-06-first-consumer/i18n/en/README.md));
+- reads parallelize: multiple consumers in the same group divide partitions among themselves (one consumer per partition maximum, see [First Consumer](../../../01-06-first-consumer/i18n/en/README.md));
 - storage scales horizontally: more partitions means more even distribution across brokers;
 - ordering is guaranteed only within a partition; across partitions it doesn't exist in general.
 
@@ -68,7 +68,7 @@ The key is not decoration. It decides what Kafka can do for you and what it can'
 - **`customer_id`** - all events for one customer in one partition. Useful when a consumer builds a per-customer profile in a local cache: you can keep the cache per-partition without syncing with neighbours. The downside: a "hot" customer (a corporate account dropping 1000 orders a day) skews the partition - one partition becomes Pareto, the others idle.
 - **`shop_id`** - all orders for one cafe in one partition. Sounds right for `kitchen-service`: the barista in one cafe sees a clean stream without neighbours' noise. In practice it falls apart on Friday: the top cafe in the city centre takes 30% of all traffic, and its partition carries a third of the promo.
 
-Brew chose `order_id` for the orders and payments topics (per-order event ordering matters) and `shop_id` for the kitchen topic (baristas group by their own cafe, and the peaky partition is tolerable because that cafe also has more staff). There is no universally correct answer: every choice optimises one thing and breaks another. Later in the course ([02-01](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)) we look at key choice under a microscope.
+Brew chose `order_id` for the orders and payments topics (per-order event ordering matters) and `shop_id` for the kitchen topic (baristas group by their own cafe, and the peaky partition is tolerable because that cafe also has more staff). There is no universally correct answer: every choice optimises one thing and breaks another. Later in the course ([Keys & Partitioning](../../../../02-producer/02-01-keys-and-partitioning/i18n/en/README.md)) we look at key choice under a microscope.
 
 ## Why you cannot reduce the number of partitions
 

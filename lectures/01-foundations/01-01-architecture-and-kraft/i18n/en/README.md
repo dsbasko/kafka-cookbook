@@ -38,7 +38,7 @@ So Kafka behaves like a queue, but a strange one:
 
 - messages don't disappear after being read, you can re-read from any position;
 - several consumers see them independently, one doesn't "take" a message away from another;
-- order is guaranteed inside a partition (more on partitions in [01-02](../../../01-02-topics-and-partitions/i18n/en/README.md));
+- order is guaranteed inside a partition (more on partitions in [Topics and partitions](../../../01-02-topics-and-partitions/i18n/en/README.md));
 - data is kept as long as you configure - forever, or three days.
 
 Out of that come the use cases: integrating microservices through events, CDC (Change Data Capture) from databases, analytics collection, audit logs, task queues with replay capability. Anywhere you have a stream of data and want the option to replay it.
@@ -48,7 +48,7 @@ Brew will use Kafka exactly that way. The following vocabulary will run through 
 - topics `brew.orders.v1`, `brew.payments.v1`, `brew.kitchen.v1`, `brew.delivery.v1`;
 - events `OrderPlaced`, `PaymentReceived`, `KitchenStarted`, `OrderReady`, `OrderDelivered`;
 - retention of 30 days for orders and payments, 7 days for kitchen and delivery;
-- compliance data (years of it) lives in S3, not in Kafka - covered in [01-04](../../../01-04-offsets-and-retention/i18n/en/README.md).
+- compliance data (years of it) lives in S3, not in Kafka - covered in [Offsets and Retention](../../../01-04-offsets-and-retention/i18n/en/README.md).
 
 ### How Kafka differs from RabbitMQ (for those with prior experience)
 
@@ -68,11 +68,11 @@ This doesn't mean Kafka is "better". Better fits its case. Task queues with comp
 Kafka has four kinds of participants. They show up across all the other lectures, so memorise the names right away.
 
 1. **Broker** - a node that stores data. Topics and partitions live on brokers. With two brokers data spreads across two; with five, across five. The course sandbox has three (`kafka-1`, `kafka-2`, `kafka-3`). Without a broker, there's nothing to store on.
-2. **Controller** - the brain of the cluster. Assigns leaders to partitions, tracks the ISR list (in-sync replicas, see [01-03](../../../01-03-replication-and-isr/i18n/en/README.md)), reassigns partitions when nodes fall, validates topic schema changes. There's one active controller per cluster. Without a controller, nobody decides who the current leader is.
+2. **Controller** - the brain of the cluster. Assigns leaders to partitions, tracks the ISR list (in-sync replicas, see [Replication and ISR](../../../01-03-replication-and-isr/i18n/en/README.md)), reassigns partitions when nodes fall, validates topic schema changes. There's one active controller per cluster. Without a controller, nobody decides who the current leader is.
 3. **Producer** - the client that writes. This is your Go code with `kgo.Client.Produce(...)`. The producer picks a topic, a key, a payload, and sends it to a broker. Without a producer, the log is empty.
 4. **Consumer** - the client that reads. Also Go code, more often through a consumer group. Without a consumer, nobody reads the log, which is fine for Kafka - data can sit.
 
-Broker and controller live on the server (in the sandbox, in docker compose). Producer and consumer live in your Go application. A single process can be both a producer and a consumer (the classic consume-process-produce pattern - see [04-02](../../../../04-reliability/04-02-consume-process-produce/i18n/en/README.md)).
+Broker and controller live on the server (in the sandbox, in docker compose). Producer and consumer live in your Go application. A single process can be both a producer and a consumer (the classic consume-process-produce pattern - see [Consume-Process-Produce](../../../../04-reliability/04-02-consume-process-produce/i18n/en/README.md)).
 
 ## Why a three-node cluster
 
@@ -158,7 +158,7 @@ Each broker has three listeners on different ports. Three is unsettling at first
 
 ClusterID is fixed (`5nnS6DRtQnKwoMjkkVxxug`) and set in `docker-compose.yml`. That way the sandbox survives `docker compose down` without losing identity: on the next start the brokers recognize each other and don't recreate metadata from scratch.
 
-Min ISR = 2, default replication factor = 3. That means: data lives on three nodes, and a write needs an acknowledgement from two. If one falls, you won't notice. If two fall, a producer with `acks=all` will start getting `NotEnoughReplicas`. Details on these settings in [02-02](../../../../02-producer/02-02-acks-and-durability/i18n/en/README.md) and [04-01](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md).
+Min ISR = 2, default replication factor = 3. That means: data lives on three nodes, and a write needs an acknowledgement from two. If one falls, you won't notice. If two fall, a producer with `acks=all` will start getting `NotEnoughReplicas`. Details on these settings in [Acks & Durability](../../../../02-producer/02-02-acks-and-durability/i18n/en/README.md) and [Transactions & EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md).
 
 ## What's inside `__cluster_metadata`
 
@@ -226,7 +226,7 @@ RaftLeader from `DescribeQuorum` is asked directly of the controller quorum and 
 
 After that the code just glues the two answers together. The broker whose id matches `LeaderID` gets the `broker + active controller` role in the table; the other voters get `broker + voter`.
 
-Further in the course we almost never call the CLI - everything goes through franz-go and kadm. We'll come back here in [03-01](../../../../03-consumer/03-01-groups-and-rebalance/i18n/en/README.md) and in [04-01](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md), when you need to know who the current controller is to understand the consequences of its re-election.
+Further in the course we almost never call the CLI - everything goes through franz-go and kadm. We'll come back here in [Consumer Groups & Rebalance](../../../../03-consumer/03-01-groups-and-rebalance/i18n/en/README.md) and in [Transactions & EOS](../../../../04-reliability/04-01-transactions-and-eos/i18n/en/README.md), when you need to know who the current controller is to understand the consequences of its re-election.
 
 ## Run
 

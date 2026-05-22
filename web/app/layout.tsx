@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Fira_Code, Inter, Literata, Manrope, Roboto_Slab } from 'next/font/google';
 import localFont from 'next/font/local';
 import { ReadingPrefsProvider } from '@/components/ReadingPrefsProvider';
@@ -112,6 +112,27 @@ export function generateMetadata(): Metadata {
     },
   };
 }
+
+// `viewportFit: 'cover'` extends the layout viewport across the entire
+// physical screen on iOS (under the notch / status bar / home indicator)
+// instead of clipping at the safe-area edges. Two side-effects we need:
+//   1. env(safe-area-inset-*) returns real pixel values (≈47px top on
+//      notched devices) so the sidebar padding pushes FABs below the notch.
+//   2. box-shadow on `position: fixed; top: 0` elements can finally render
+//      ABOVE the FAB into the now-paintable status-bar zone instead of
+//      hitting a hard clip at the layout-viewport edge.
+// `themeColor` then matches Safari chrome (status bar + URL chip) to
+// --bg-default so the chrome reads as part of the page. Paper mode is a
+// manual user choice and falls under the light branch — close enough in hue.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#faf7f2' },
+    { media: '(prefers-color-scheme: dark)', color: '#16140f' },
+  ],
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // gate-init operates on lesson keys + linear order (language-agnostic), so

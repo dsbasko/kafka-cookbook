@@ -53,11 +53,32 @@
 }
 
 @media (max-width: 720px) {
+  /* Single-column stack with the next-card promoted to the top so the
+     dominant flow ("finished reading → next lesson") lands as the primary
+     CTA. Prev becomes a secondary card below — same affordance, lower
+     emphasis. */
   .row {
     grid-template-columns: 1fr;
+    gap: var(--space-3);
   }
 
   .next {
     text-align: left;
+    order: 1;
+    padding: var(--space-5) var(--space-5);
+    border-color: var(--accent-main);
+    background-color: var(--accent-main-soft);
+  }
+
+  .next .label {
+    color: var(--accent-main);
+  }
+
+  .next .title {
+    font-size: 18px;
+  }
+
+  .prev {
+    order: 2;
   }
 }

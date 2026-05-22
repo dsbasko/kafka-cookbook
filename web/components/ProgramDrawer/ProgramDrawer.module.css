@@ -309,6 +309,17 @@
   display: inline-flex;
 }
 
+/* ---------- Mobile context strip (progress + prev/next + home/github) ---- */
+
+/* Default = desktop: the breadcrumb header carries progress and prev/next,
+   the bottom sidebar carries home and github, so suppress these inside the
+   drawer to avoid duplication. The mobile breakpoint below re-enables them. */
+.contextProgress,
+.contextNav,
+.contextFooter {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .drawer {
     width: 100vw;
@@ -317,10 +328,236 @@
 }
 
 @media (max-width: 1023px) {
+  /* Drawer covers the entire viewport on mobile — the user explicitly asked
+     for a fullscreen overlay (no peeking content behind, no slide-in width
+     guess). The drawer is the only command surface on this breakpoint. */
   .drawer {
     left: 0;
-    top: 56px;
-    width: min(420px, 100vw);
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100vw;
+    width: 100dvw;
     max-width: 100vw;
+    border: 0;
+    box-shadow: none;
+  }
+
+  /* Sticky frosted header so the eyebrow + title persist under the iOS
+     status bar as the user scrolls the module list. Matches the design's
+     drawer-head treatment (color-mix(bg 94%) + 16px backdrop blur). */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: max(env(safe-area-inset-top), var(--space-4)) var(--space-5)
+      var(--space-4);
+    background-color: color-mix(in srgb, var(--bg-default) 94%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .contextProgress {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3) var(--space-5);
+    border-bottom: 1px solid var(--bg-stroke);
+    flex: 0 0 auto;
+  }
+
+  /* The ProgressBar uses min-width:14ch on its label and a fixed-width track;
+     on a mobile sheet we want it to span the full width — left-align label,
+     stretch track to fill remaining space. */
+  .contextProgress > :global(*) {
+    width: 100%;
+  }
+
+  /* Lesson-nav context block: current card on top, prev/next 2-up below. */
+  .contextNav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--bg-stroke);
+    flex: 0 0 auto;
+  }
+
+  .currentCard {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-surface);
+  }
+
+  .currentEyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--content-tertiary);
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+  }
+
+  .currentTitle {
+    margin-top: 4px;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.25;
+    color: var(--content-primary);
+  }
+
+  .currentMeta {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--content-tertiary);
+  }
+
+  .navRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+
+  .navCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-default);
+    text-decoration: none;
+    color: inherit;
+    min-height: 56px;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .navCard:hover,
+  .navCard:focus-visible {
+    border-color: var(--bg-stroke-strong);
+    background-color: var(--bg-subtle);
+  }
+
+  .navCard:focus-visible {
+    outline: 2px solid var(--accent-main);
+    outline-offset: 2px;
+  }
+
+  .navNext {
+    flex-direction: row;
+    text-align: right;
+  }
+
+  .navNext .navMeta {
+    align-items: flex-end;
+  }
+
+  .navPrev {
+    text-align: left;
+  }
+
+  .navDisabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .navChevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 50%;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--bg-stroke);
+    color: var(--content-secondary);
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .navCard:hover .navChevron,
+  .navCard:focus-visible .navChevron {
+    background-color: var(--content-primary);
+    color: var(--bg-default);
+    border-color: var(--content-primary);
+  }
+
+  .navMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .navLabel {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--content-tertiary);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
+
+  .navTitle {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--content-primary);
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .contextFooter {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5)
+      calc(var(--space-4) + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--bg-stroke);
+    flex: 0 0 auto;
+    background-color: var(--bg-default);
+  }
+
+  .footerLink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-surface);
+    color: var(--content-primary);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .footerLink:hover,
+  .footerLink:focus-visible {
+    border-color: var(--accent-main);
+    background-color: var(--bg-subtle);
+  }
+
+  .footerLink:focus-visible {
+    outline: 2px solid var(--accent-main);
+    outline-offset: 2px;
+  }
+
+  .footerLink svg {
+    width: 18px;
+    height: 18px;
+    color: var(--content-secondary);
   }
 }

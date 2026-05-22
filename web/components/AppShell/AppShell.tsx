@@ -105,8 +105,20 @@ export function AppShell({ children, course }: AppShellProps) {
         course={course}
         currentModuleId={currentModule?.id}
         currentSlug={currentLesson?.slug}
+        currentLessonTitle={currentLesson?.title}
+        currentLessonIndex={
+          currentModule && currentLesson
+            ? currentModule.lessons.findIndex((l) => l.slug === currentLesson.slug) + 1
+            : undefined
+        }
+        currentModuleTitle={currentModule?.title}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        prev={prev}
+        next={next}
+        repoUrl={course.repoUrl}
+        lang={lang}
+        totalLessons={getTotalLessons(course)}
       />
       <div className={styles.body}>
         {hideHeader ? null : <Header lang={lang} breadcrumbs={breadcrumbs} actions={actions} />}

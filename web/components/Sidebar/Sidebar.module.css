@@ -71,27 +71,37 @@
   border-color: var(--bg-stroke);
 }
 
+/* Mobile: the sidebar becomes a transparent top-of-viewport band carrying
+   two floating action buttons — settings on the left, program on the right.
+   Home and GitHub are demoted to inside the ProgramDrawer (they used to sit
+   in the bottom dock that this file replaces). A vertical gradient fades
+   the default background into transparency so the icons stay legible over
+   any prose without painting a solid stripe across the top. */
 @media (max-width: 1023px) {
   .sidebar {
     position: fixed;
-    left: 50%;
-    bottom: max(var(--space-3), env(safe-area-inset-bottom));
-    top: auto;
-    transform: translateX(-50%);
-    width: min(calc(100% - var(--space-5) * 2), 390px);
-    height: 64px;
+    inset: 0 0 auto 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    transform: none;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: max(env(safe-area-inset-top), var(--space-2)) var(--space-4) var(--space-6);
     flex-direction: row;
-    justify-content: space-around;
-    align-items: center;
-    padding: 0 var(--space-4);
+    justify-content: space-between;
+    align-items: flex-start;
     gap: 0;
-    border: 1px solid var(--bg-stroke);
-    border-radius: 999px;
-    background-color: color-mix(in srgb, var(--bg-default) 88%, transparent);
-    backdrop-filter: blur(14px) saturate(160%);
-    -webkit-backdrop-filter: blur(14px) saturate(160%);
-    box-shadow: var(--shadow-md);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     z-index: var(--z-header);
+    pointer-events: none;
   }
 
   .nav,
@@ -99,17 +109,38 @@
     flex-direction: row;
     width: auto;
     gap: var(--space-2);
+    margin: 0;
+    pointer-events: auto;
   }
 
+  /* Settings (left) is the first visual slot, Program (right) the second.
+     Flex order flips .footer ahead of .nav without changing the JSX so
+     ARIA/focus order continues to read Home → Program → Settings → GitHub
+     on desktop. */
   .footer {
-    margin-top: 0;
-    margin-left: 0;
+    order: 1;
+  }
+
+  .nav {
+    order: 2;
+  }
+
+  /* Hide Home (Link) and GitHub (anchor) on mobile — their destinations
+     live inside the program overlay now. .button is the shared FAB class,
+     and only Links/anchors carry it on these spots; the program <button>
+     stays visible. */
+  .nav > a.button,
+  .footer > a.button {
+    display: none;
   }
 
   .button {
     width: 44px;
     height: 44px;
     border-radius: 999px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--bg-stroke);
+    box-shadow: var(--shadow-sm);
   }
 
   .button svg {
@@ -122,11 +153,5 @@
     background-color: var(--content-primary);
     color: var(--bg-default);
     border-color: var(--content-primary);
-  }
-}
-
-@media (max-width: 480px) {
-  .sidebar {
-    width: calc(100% - var(--space-4) * 2);
   }
 }

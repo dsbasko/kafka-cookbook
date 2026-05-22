@@ -46,7 +46,7 @@ export function Sidebar({ onProgramClick, isProgramOpen, repoUrl }: SidebarProps
       </nav>
 
       <div className={styles.footer}>
-        <SettingsToggle />
+        <SettingsToggle repoUrl={repoUrl} />
         <a
           className={styles.button}
           href={repoUrl}

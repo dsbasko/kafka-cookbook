@@ -3,10 +3,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useGate } from '@/components/GateProvider';
-import type { Course } from '@/lib/course';
+import { ProgressBar } from '@/components/ProgressBar';
+import { GitHubIcon, HomeIcon } from '@/components/Sidebar/icons';
+import type { Course, FlatLessonEntry } from '@/lib/course';
 import { formatDurationShort, parseDurationMin } from '@/lib/format';
 import { applyGatePainting } from '@/lib/gate-mark-script';
-import { isCompleted, lessonKey } from '@/lib/progress';
+import type { Lang } from '@/lib/lang';
+import { isCompleted, lessonKey, markCompletedAndAdvance } from '@/lib/progress';
 import { useLang, useT } from '@/lib/use-i18n';
 import { LockIcon } from './LockIcon';
 import styles from './ProgramDrawer.module.css';
@@ -21,20 +24,46 @@ type ProgramDrawerProps = {
   course: Course;
   currentModuleId?: string;
   currentSlug?: string;
+  /* Mobile-only "current lesson" card surfaces these three together — they
+     mirror the design's `dln-current` block (eyebrow + title + meta). Kept
+     optional because home/module-index pages have no active lesson. */
+  currentLessonTitle?: string;
+  currentLessonIndex?: number;
+  currentModuleTitle?: string;
   isOpen: boolean;
   onClose: () => void;
+  /* Mobile-only overlay extras. On desktop the breadcrumb header and the
+     bottom sidebar carry these affordances; on mobile both are gone, so the
+     drawer becomes the single command surface and renders them inline. */
+  prev?: FlatLessonEntry | null;
+  next?: FlatLessonEntry | null;
+  repoUrl?: string;
+  /* `lang` is also available from the i18n provider via useLang(), but the
+     prop wins so the drawer paints the right links during SSR before the
+     provider initialises on the client. */
+  lang?: Lang;
+  totalLessons?: number;
 };
 
 export function ProgramDrawer({
   course,
   currentModuleId,
   currentSlug,
+  currentLessonTitle,
+  currentLessonIndex,
+  currentModuleTitle,
   isOpen,
   onClose,
+  prev,
+  next,
+  repoUrl,
+  lang: langProp,
+  totalLessons,
 }: ProgramDrawerProps) {
   const gate = useGate();
   const t = useT();
-  const lang = useLang();
+  const langCtx = useLang();
+  const lang = langProp ?? langCtx;
   // Use the shared progress map from GateProvider (single source of truth) so
   // the drawer agrees with checkmark state elsewhere on the page.
   const progress = gate.hydrated ? gate.progress : null;
@@ -149,6 +178,99 @@ export function ProgramDrawer({
           </button>
         </header>
 
+        {/* Mobile-only context strip. Desktop suppresses these blocks via CSS
+            because the Sidebar (home / GitHub) and Header (progress / prev /
+            next) already carry the same affordances. */}
+        {totalLessons ? (
+          <div className={styles.contextProgress}>
+            <ProgressBar total={totalLessons} lang={lang} />
+          </div>
+        ) : null}
+
+        {currentModuleId && currentSlug && (prev || next || currentLessonTitle) ? (
+          <div className={styles.contextNav} aria-label={t.lessonNavLabel}>
+            {currentLessonTitle ? (
+              <div className={styles.currentCard}>
+                <div className={styles.currentEyebrow}>{t.currentLessonEyebrow}</div>
+                <div className={styles.currentTitle}>{currentLessonTitle}</div>
+                {typeof currentLessonIndex === 'number' ? (
+                  <div className={styles.currentMeta}>
+                    {t.currentLessonNumberPrefix}{' '}
+                    {String(currentLessonIndex).padStart(2, '0')}
+                    {currentModuleTitle ? ` · ${currentModuleTitle}` : ''}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className={styles.navRow}>
+              {prev ? (
+                <Link
+                  href={`/${lang}/${prev.moduleId}/${prev.lesson.slug}`}
+                  className={`${styles.navCard} ${styles.navPrev}`}
+                  onClick={onClose}
+                  tabIndex={isOpen ? 0 : -1}
+                  aria-label={t.prevLessonAria}
+                >
+                  <span className={styles.navChevron} aria-hidden="true">
+                    <ChevronLeftIcon />
+                  </span>
+                  <span className={styles.navMeta}>
+                    <span className={styles.navLabel}>{t.prevLessonShort}</span>
+                    <span className={styles.navTitle}>{prev.lesson.title}</span>
+                  </span>
+                </Link>
+              ) : (
+                <span
+                  className={`${styles.navCard} ${styles.navPrev} ${styles.navDisabled}`}
+                  aria-hidden="true"
+                >
+                  <span className={styles.navChevron}>
+                    <ChevronLeftIcon />
+                  </span>
+                  <span className={styles.navMeta}>
+                    <span className={styles.navLabel}>{t.firstLessonTitle}</span>
+                  </span>
+                </span>
+              )}
+              {next ? (
+                <Link
+                  href={`/${lang}/${next.moduleId}/${next.lesson.slug}`}
+                  className={`${styles.navCard} ${styles.navNext}`}
+                  onClick={() => {
+                    markCompletedAndAdvance(
+                      gate.course,
+                      lessonKey(currentModuleId, currentSlug),
+                    );
+                    onClose();
+                  }}
+                  tabIndex={isOpen ? 0 : -1}
+                  aria-label={t.nextLessonAria}
+                >
+                  <span className={styles.navMeta}>
+                    <span className={styles.navLabel}>{t.nextLessonShort}</span>
+                    <span className={styles.navTitle}>{next.lesson.title}</span>
+                  </span>
+                  <span className={styles.navChevron} aria-hidden="true">
+                    <ChevronRightIcon />
+                  </span>
+                </Link>
+              ) : (
+                <span
+                  className={`${styles.navCard} ${styles.navNext} ${styles.navDisabled}`}
+                  aria-hidden="true"
+                >
+                  <span className={styles.navMeta}>
+                    <span className={styles.navLabel}>{t.lastLessonTitle}</span>
+                  </span>
+                  <span className={styles.navChevron}>
+                    <ChevronRightIcon />
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <nav className={styles.body} aria-label={t.moduleListLabel}>
           <ol className={styles.modules}>
             {course.modules.map((mod, mIndex) => {
@@ -250,6 +372,32 @@ export function ProgramDrawer({
             })}
           </ol>
         </nav>
+
+        {/* Mobile-only secondary actions. Same hide-on-desktop rule as the
+            context strip above. */}
+        {repoUrl ? (
+          <div className={styles.contextFooter}>
+            <Link
+              href={`/${lang}`}
+              className={styles.footerLink}
+              onClick={onClose}
+              tabIndex={isOpen ? 0 : -1}
+            >
+              <HomeIcon />
+              <span>{t.home}</span>
+            </Link>
+            <a
+              className={styles.footerLink}
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              tabIndex={isOpen ? 0 : -1}
+            >
+              <GitHubIcon />
+              <span>{t.githubRepo}</span>
+            </a>
+          </div>
+        ) : null}
       </aside>
     </>
   );
@@ -270,6 +418,44 @@ function CloseIcon() {
       focusable="false"
     >
       <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }

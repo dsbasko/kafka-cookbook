@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
-import { SettingsIcon } from '@/components/Sidebar/icons';
+import { GitHubIcon, SettingsIcon } from '@/components/Sidebar/icons';
 import { useReadingPrefs } from '@/components/ReadingPrefsProvider';
 import { useTheme } from '@/components/ThemeProvider';
 import {
@@ -185,7 +185,13 @@ function SizeStepper({ kind, value, pxLabel, onStep, decreaseLabel, increaseLabe
   );
 }
 
-export function SettingsToggle() {
+type SettingsToggleProps = {
+  /* Used by the mobile sheet's bottom "Ресурсы" card. Desktop renders no
+     GitHub affordance from inside this popover — the rail outside it does. */
+  repoUrl?: string;
+};
+
+export function SettingsToggle({ repoUrl }: SettingsToggleProps = {}) {
   const t = useT();
   const { prefs, setProseSize, setCodeSize, setProseFont, setCodeFont } = useReadingPrefs();
   const { preference: themePreference, setPreference: setThemePreference } = useTheme();
@@ -410,14 +416,42 @@ export function SettingsToggle() {
 
             <div className={styles.row}>
               <span className={styles.rowLabel}>{t.readingPrefsSize}</span>
-              <SizeStepper
-                kind="prose"
-                value={prefs.proseSize}
-                pxLabel={proseSizeLabel}
-                onStep={setProseSize}
-                decreaseLabel={t.readingPrefsDecrease}
-                increaseLabel={t.readingPrefsIncrease}
-              />
+              <div className={styles.sizeControl}>
+                <div className={styles.sizeControlDesktop}>
+                  <SizeStepper
+                    kind="prose"
+                    value={prefs.proseSize}
+                    pxLabel={proseSizeLabel}
+                    onStep={setProseSize}
+                    decreaseLabel={t.readingPrefsDecrease}
+                    increaseLabel={t.readingPrefsIncrease}
+                  />
+                </div>
+                <div
+                  className={`${styles.seg} ${styles.segSizes} ${styles.sizeControlMobile}`}
+                  role="radiogroup"
+                  aria-label={`${t.readingPrefsProseSection} — ${t.readingPrefsSize}`}
+                >
+                  {SIZE_STEPS.map((step) => {
+                    const active = prefs.proseSize === step;
+                    const px = PROSE_SIZE_PX[step];
+                    return (
+                      <button
+                        key={step}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={`${px}px`}
+                        className={`${styles.segOpt} ${styles.segMono}`}
+                        data-active={active ? 'true' : 'false'}
+                        onClick={() => setProseSize(step)}
+                      >
+                        {px}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -466,16 +500,70 @@ export function SettingsToggle() {
 
             <div className={styles.row}>
               <span className={styles.rowLabel}>{t.readingPrefsSize}</span>
-              <SizeStepper
-                kind="code"
-                value={prefs.codeSize}
-                pxLabel={codeSizeLabel}
-                onStep={setCodeSize}
-                decreaseLabel={t.readingPrefsDecrease}
-                increaseLabel={t.readingPrefsIncrease}
-              />
+              <div className={styles.sizeControl}>
+                <div className={styles.sizeControlDesktop}>
+                  <SizeStepper
+                    kind="code"
+                    value={prefs.codeSize}
+                    pxLabel={codeSizeLabel}
+                    onStep={setCodeSize}
+                    decreaseLabel={t.readingPrefsDecrease}
+                    increaseLabel={t.readingPrefsIncrease}
+                  />
+                </div>
+                <div
+                  className={`${styles.seg} ${styles.segSizes} ${styles.sizeControlMobile}`}
+                  role="radiogroup"
+                  aria-label={`${t.readingPrefsCodeSection} — ${t.readingPrefsSize}`}
+                >
+                  {SIZE_STEPS.map((step) => {
+                    const active = prefs.codeSize === step;
+                    const px = CODE_SIZE_PX[step];
+                    return (
+                      <button
+                        key={step}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={`${px}px`}
+                        className={`${styles.segOpt} ${styles.segMono}`}
+                        data-active={active ? 'true' : 'false'}
+                        onClick={() => setCodeSize(step)}
+                      >
+                        {px}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </section>
+
+          {repoUrl ? (
+            <>
+              <div className={`${styles.divider} ${styles.resourcesDivider}`} />
+              <div className={`${styles.row} ${styles.resourcesRow}`}>
+                <span className={styles.rowLabel}>{t.settingsResourcesLabel}</span>
+                <a
+                  href={repoUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className={styles.resourceLink}
+                >
+                  <span className={styles.resourceIcon} aria-hidden="true">
+                    <GitHubIcon />
+                  </span>
+                  <span className={styles.resourceText}>
+                    <span className={styles.resourceTitle}>{t.githubRepo}</span>
+                    <span className={styles.resourceSub}>{t.githubRepoSub}</span>
+                  </span>
+                  <span className={styles.resourceArrow} aria-hidden="true">
+                    →
+                  </span>
+                </a>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </>

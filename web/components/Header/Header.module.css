@@ -118,3 +118,14 @@
     padding: var(--space-3) var(--space-5);
   }
 }
+
+/* Mobile reader mode: the sticky header is replaced by two FABs on the
+   sidebar layer (settings + program), so the breadcrumb/progress/lesson-nav
+   chrome is hidden entirely. Everything it carried — breadcrumbs context,
+   progress percent, prev/next — lives inside the program overlay and
+   inside LessonNav at the article footer. */
+@media (max-width: 1023px) {
+  .header {
+    display: none;
+  }
+}

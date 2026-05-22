@@ -7,6 +7,11 @@ html {
     sans-serif;
   font-size: var(--font-size-md);
   color-scheme: light dark;
+  /* iOS Safari paints the area above the layout viewport (under the URL bar
+     chip and inside the rubber-band overscroll) with the <html> background,
+     not <body>. Without this, that area falls back to a default dark colour
+     and the FAB halos appear to clip at the top edge of the page. */
+  background-color: var(--bg-default);
 }
 
 body {

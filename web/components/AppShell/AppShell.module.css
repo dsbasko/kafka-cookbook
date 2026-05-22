@@ -25,13 +25,16 @@
     flex-direction: column;
   }
 
-  /* Sidebar becomes a floating bottom pill on mobile (see Sidebar.module.css),
-     so the body reclaims full width and the main column reserves space for it. */
+  /* Sidebar collapses into two FABs at the top of the viewport (see
+     Sidebar.module.css). The body reclaims full width; the main column adds
+     a top clearance so heroes/hl titles don't render under the gradient
+     band that the FABs sit on. */
   .body {
     width: 100%;
   }
 
   .main {
-    padding-bottom: calc(64px + var(--space-6) + env(safe-area-inset-bottom));
+    padding-top: calc(env(safe-area-inset-top, 0px) + 56px);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

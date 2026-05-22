@@ -486,13 +486,113 @@
   font-weight: var(--font-weight-regular, 400);
 }
 
+/* Size control wrapper: desktop renders the stepper, mobile renders a
+   segmented size pill. Both are rendered (a11y radiogroup stays consistent
+   between breakpoints) and CSS swaps which one is visible. */
+.sizeControl {
+  display: contents;
+}
+
+.sizeControlMobile {
+  display: none;
+}
+
+/* ─── Resources / GitHub link (mobile-only via media query below) ──── */
+
+.resourcesDivider {
+  display: none;
+}
+
+.resourcesRow {
+  display: none;
+}
+
+.resourceLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--bg-stroke);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  color: var(--content-primary);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.resourceLink:hover,
+.resourceLink:focus-visible {
+  background-color: var(--bg-subtle);
+  border-color: var(--bg-stroke-strong);
+}
+
+.resourceLink:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.resourceIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background-color: var(--content-primary);
+  color: var(--bg-default);
+  flex: 0 0 auto;
+}
+
+.resourceIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.resourceText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resourceTitle {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--content-primary);
+}
+
+.resourceSub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-tertiary);
+}
+
+.resourceArrow {
+  font-size: 14px;
+  color: var(--content-tertiary);
+}
+
 /* ─── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 1023px) {
+  /* The trigger sits as a standalone FAB at top-left in mobile (no longer
+     wrapped by the sidebar pill), so it needs its own surface treatment. */
   .trigger {
     width: 44px;
     height: 44px;
     border-radius: 999px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--bg-stroke);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .trigger[aria-expanded='true'] {
+    background-color: var(--content-primary);
+    color: var(--bg-default);
+    border-color: var(--content-primary);
   }
 
   .overlay {
@@ -510,29 +610,31 @@
     background: rgba(0, 0, 0, 0.55);
   }
 
+  /* Match the ProgramDrawer mobile chrome: full-viewport surface, no rounded
+     corners, no top shadow, slide-in from the left edge. The sheet/grabber
+     pattern previously used here is dropped so nav and settings read as
+     the same primitive on mobile. */
   .popover {
     position: fixed;
-    inset: auto 0 0 0;
-    left: 0;
+    inset: 0;
+    top: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    max-width: 100%;
-    max-height: 90dvh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 0;
-    box-shadow:
-      0 -8px 24px rgba(35, 25, 10, 0.12),
-      0 -1px 0 var(--bg-stroke);
-    animation: settingsSheetIn 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    left: 0;
+    width: 100vw;
+    width: 100dvw;
+    max-width: 100vw;
+    max-height: none;
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: var(--bg-default);
+    animation: settingsDrawerIn 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 
   [data-theme='dark'] .popover {
-    box-shadow:
-      0 -8px 24px rgba(0, 0, 0, 0.5),
-      0 -1px 0 var(--bg-stroke);
+    box-shadow: none;
   }
 
   .popover::before {
@@ -540,17 +642,20 @@
   }
 
   .grabber {
-    display: block;
-    width: 36px;
-    height: 4px;
-    margin: 8px auto 0;
-    border-radius: 999px;
-    background: var(--bg-stroke-strong);
-    flex: 0 0 auto;
+    display: none;
   }
 
+  /* Sticky frosted header — mirrors ProgramDrawer.module.css under the same
+     breakpoint so both drawers carry the same eyebrow + title chrome. */
   .head {
-    padding: var(--space-4) var(--space-5) var(--space-3);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: max(env(safe-area-inset-top), var(--space-4)) var(--space-5)
+      var(--space-4);
+    background-color: color-mix(in srgb, var(--bg-default) 94%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
 
   .body {
@@ -558,15 +663,57 @@
     padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
   }
 
-  /* Collapse row label to its own line on mobile */
+  /* Design keeps the row label on the LEFT in mobile (mono uppercase, 56px
+     column) — the segmented control sits next to it. This matches the
+     reference's drawer-settings .mset-row grid: `56px 1fr`. */
   .row {
-    grid-template-columns: 1fr;
-    gap: var(--space-2);
-    align-items: stretch;
+    grid-template-columns: 56px 1fr;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .rowLabel {
+    font-size: 10px;
+    letter-spacing: 0.08em;
   }
 
   .segOpt {
-    padding: 9px 10px;
+    padding: 8px 10px;
+  }
+
+  /* Swap stepper for a horizontal segmented size selector. The 6 options
+     (14/16/18/20/22/24) scroll horizontally when they don't fit. */
+  .sizeControlDesktop {
+    display: none;
+  }
+
+  .sizeControlMobile {
+    display: flex;
+  }
+
+  .segSizes {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .segSizes::-webkit-scrollbar {
+    display: none;
+  }
+
+  .segSizes .segOpt {
+    flex: 1 0 auto;
+    min-width: 38px;
+    scroll-snap-align: start;
+  }
+
+  /* Surface the GitHub resources card at the bottom of the sheet. */
+  .resourcesDivider {
+    display: block;
+  }
+
+  .resourcesRow {
+    display: grid;
   }
 }
 
@@ -589,12 +736,14 @@
   }
 }
 
-@keyframes settingsSheetIn {
+@keyframes settingsDrawerIn {
   from {
-    transform: translateY(100%);
+    transform: translateX(-12px);
+    opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 

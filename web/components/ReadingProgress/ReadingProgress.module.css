@@ -8,3 +8,12 @@
   transition: width 80ms linear;
   pointer-events: none;
 }
+
+/* Mobile hides the bar entirely — the desktop header it anchors to is also
+   hidden on this breakpoint, and the design's mobile lesson screen leaves the
+   reading-progress affordance off the page. */
+@media (max-width: 1023px) {
+  .bar {
+    display: none;
+  }
+}

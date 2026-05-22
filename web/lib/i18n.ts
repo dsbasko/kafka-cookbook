@@ -33,6 +33,16 @@ export type UIDict = {
   prevLesson: string;
   nextLesson: string;
 
+  // Mobile drawer lesson-nav: short eyebrow used next to a chevron icon
+  prevLessonShort: string;
+  nextLessonShort: string;
+  currentLessonEyebrow: string;
+  currentLessonNumberPrefix: string;
+
+  // Mobile settings: "Resources" section + GitHub link sub-label
+  settingsResourcesLabel: string;
+  githubRepoSub: string;
+
   // HeaderLessonNav (chevron buttons reuse a shorter form without the arrow)
   prevLessonAria: string;
   nextLessonAria: string;
@@ -179,6 +189,14 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
     prevLesson: '← Предыдущий урок',
     nextLesson: 'Следующий урок →',
 
+    prevLessonShort: 'пред.',
+    nextLessonShort: 'след.',
+    currentLessonEyebrow: '/ текущий урок',
+    currentLessonNumberPrefix: 'урок',
+
+    settingsResourcesLabel: 'Ресурсы',
+    githubRepoSub: 'исходный код курса',
+
     prevLessonAria: 'Предыдущий урок',
     nextLessonAria: 'Следующий урок',
     firstLessonTitle: 'Это первый урок',
@@ -305,6 +323,14 @@ export const UI_STRINGS: Record<Lang, UIDict> = {
     lessonNavLabel: 'Lesson navigation',
     prevLesson: '← Previous lesson',
     nextLesson: 'Next lesson →',
+
+    prevLessonShort: 'prev',
+    nextLessonShort: 'next',
+    currentLessonEyebrow: '/ current lesson',
+    currentLessonNumberPrefix: 'lesson',
+
+    settingsResourcesLabel: 'Resources',
+    githubRepoSub: 'course source code',
 
     prevLessonAria: 'Previous lesson',
     nextLessonAria: 'Next lesson',
